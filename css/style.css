@@ -1,0 +1,181 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@500;700&display=swap');
+
+/* Core Theme Variables */
+:root {
+    --neon-blue: #00f3ff;
+    --neon-purple: #b026ff;
+    --neon-pink: #ff007f;
+    --glass-bg: rgba(20, 20, 35, 0.4);
+    --glass-border: rgba(255, 255, 255, 0.1);
+}
+
+body {
+    font-family: 'Rajdhani', sans-serif;
+    color: white;
+    overflow-x: hidden;
+}
+
+/* Main page background and theme */
+/* Deep Space Animated Background */
+.galaxy-bg {
+    background: radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%);
+    position: relative;
+    z-index: 0;
+}
+
+.galaxy-bg::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image: 
+        radial-gradient(1px 1px at 20px 30px, #ffffff, rgba(0,0,0,0)),
+        radial-gradient(1px 1px at 40px 70px, #ffffff, rgba(0,0,0,0)),
+        radial-gradient(2px 2px at 90px 40px, #ffffff, rgba(0,0,0,0)),
+        radial-gradient(2px 2px at 160px 120px, #ffffff, rgba(0,0,0,0));
+    background-repeat: repeat;
+    background-size: 200px 200px;
+    opacity: 0.3;
+    z-index: -1;
+    animation: stars 100s linear infinite;
+}
+
+@keyframes stars {
+    from { transform: translateY(0); }
+    to { transform: translateY(-2000px); }
+}
+
+/* Glassmorphism Classes */
+.glass-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+}
+
+.glass-input {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    color: white;
+    border-radius: 10px;
+    padding: 12px;
+}
+
+.glass-input:focus {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--neon-blue);
+    color: white;
+    box-shadow: 0 0 10px rgba(0, 243, 255, 0.2);
+}
+.glass-input::placeholder {
+    color: white !important;
+    opacity: 0.2; /* Optional: makes it look slightly faded so it looks like a hint */
+}
+
+/* Typography & Visuals */
+.cosmic-title {
+    font-family: 'Orbitron', sans-serif;
+    letter-spacing: 2px;
+    text-shadow: 0 0 10px var(--neon-blue);
+}
+
+.high-score-box {
+    background: rgba(0, 243, 255, 0.1);
+    border: 1px solid var(--neon-blue);
+    border-radius: 15px;
+    box-shadow: inset 0 0 20px rgba(0, 243, 255, 0.2);
+}
+
+.tracking-wide {
+    letter-spacing: 3px;
+}
+
+/* Ergonomic Neon Buttons */
+.neon-btn {
+    /* Use flexbox to center content perfectly */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    margin-bottom: 10%;
+    background: transparent;
+    color: white;
+    font-family: 'Orbitron', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border: 1px solid var(--neon-blue);
+    
+    /* Reduced horizontal padding to prevent text overflow */
+    padding: 10px 15px; 
+    
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 10px rgba(0, 243, 255, 0.2), inset 0 0 10px rgba(0, 243, 255, 0.1);
+    
+    /* Important for centering */
+    text-align: center;
+    white-space: nowrap; /* Prevents text from breaking into two lines */
+}
+.neon-btn:hover {
+    background: var(--neon-blue);
+    color: black;
+    box-shadow: 0 0 20px var(--neon-blue), 0 0 40px var(--neon-blue);
+}
+
+.btn-easy { border-color: #00ff88; box-shadow: 0 0 10px rgba(0, 255, 136, 0.2); }
+.btn-easy:hover { background: #00ff88; box-shadow: 0 0 20px #00ff88; }
+
+.btn-medium { border-color: #ffaa00; box-shadow: 0 0 10px rgba(255, 170, 0, 0.2); }
+.btn-medium:hover { background: #ffaa00; box-shadow: 0 0 20px #ffaa00; }
+
+.btn-hard { border-color: var(--neon-pink); box-shadow: 0 0 10px rgba(255, 0, 127, 0.2); }
+.btn-hard:hover { background: var(--neon-pink); box-shadow: 0 0 20px var(--neon-pink); }
+
+/* Tetris Game Board Grid */
+/* Tetris Game Board Grid */
+.tetris-board {
+    width: 300px;       /* 10 columns * 30px */
+    height: 600px;      /* 20 rows * 30px */
+    background: rgba(0, 0, 0, 0.6);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#tetrisCanvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    z-index: 1; /* Keeps blocks above the grid lines */
+}
+
+/* Background grid styling */
+.tetris-board::before {
+    content: '';
+    position: absolute; /* Added so it fills the container properly */
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-size: 30px 30px; /* MATCHES the 30px block size */
+    background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    pointer-events: none;
+    z-index: 0;
+}
+.mock-piece {
+    border-radius: 4px;
+    box-shadow: inset 0 0 10px rgba(255,255,255,0.5);
+    border: 1px solid rgba(0,0,0,0.5);
+}
+
+.next-piece-box {
+    width: 100px;
+    height: 100px;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px dashed var(--glass-border);
+    border-radius: 10px;
+}
