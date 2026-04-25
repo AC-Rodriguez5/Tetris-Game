@@ -24,9 +24,10 @@ const TETROMINOES = [
     { color: 'purple', shape:[[0, 1, 0], [1, 1, 1]] },
 ]
 
-// Game state variables 
-let board = Array.from({ length: ROWS }, () => Array(COLS).fill(null)); 
-let currentTetromino = getRandomTeromino();
+// Game state variables
+let board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+let currentTetromino = null;
+let nextTetromino = null;
 let currentPosition = { x: 3, y: 0 }; // Start near the top center
 let score = 0;
 let intervarl = 400;  // Starting interval
@@ -35,6 +36,14 @@ let speedIncreaseInterval = 5000;  // Increase speed every 5 seconds (was 10000)
 let lastSpeedIncreaseTime = Date.now();
 let lastMoveTime = 0;  // For smooth animation tracking
 let scoreSent = false;// Flag to ensure score is sent only once
+
+// Initialize the first pieces
+function initializeTetrominos() {
+    currentTetromino = getRandomTetromino();
+    nextTetromino = getRandomTetromino();
+    updateNextPieceDisplay();
+}
+initializeTetrominos();
 
 
 function saveHighScore() {
@@ -71,9 +80,64 @@ function quitGame() {
     window.location.href = 'dashboard.php';
 }
 
-function getRandomTeromino() {
+function getRandomTetromino() {
     // Randomly select a tetromino from the predefined list and return it to be used as the current piece in the game.
     return TETROMINOES[Math.floor(Math.random() * TETROMINOES.length)];
+}
+
+function updateNextPieceDisplay() {
+    // Display the next piece in the UI
+    const nextPieceContainer = document.getElementById('nextPiece');
+    if (nextPieceContainer && nextTetromino) {
+        nextPieceContainer.innerHTML = '';
+        const nextShape = nextTetromino.shape;
+        const nextColor = nextTetromino.color;
+
+        // Use smaller blocks for next piece display
+        const nextBlockSize = 20;
+
+        // Create a container for the next piece with proper centering
+        const pieceContainer = document.createElement('div');
+        pieceContainer.style.position = 'relative';
+        pieceContainer.style.width = '100%';
+        pieceContainer.style.height = '100%';
+        pieceContainer.style.display = 'flex';
+        pieceContainer.style.alignItems = 'center';
+        pieceContainer.style.justifyContent = 'center';
+
+        // Calculate the piece dimensions
+        const pieceWidth = nextShape[0].length * nextBlockSize;
+        const pieceHeight = nextShape.length * nextBlockSize;
+
+        // Create the piece wrapper
+        const pieceWrapper = document.createElement('div');
+        pieceWrapper.style.position = 'relative';
+        pieceWrapper.style.width = pieceWidth + 'px';
+        pieceWrapper.style.height = pieceHeight + 'px';
+
+        // Loop through the shape matrix and create blocks for the next piece display,
+        // positioning them based on their coordinates in the shape array.
+        for(let y = 0; y < nextShape.length; y++) {
+            for(let x = 0; x < nextShape[y].length; x++) {
+                if(nextShape[y][x]) {
+                    const block = document.createElement('div');
+                    block.style.width = nextBlockSize + 'px';
+                    block.style.height = nextBlockSize + 'px';
+                    block.style.backgroundColor = nextColor;
+                    block.style.border = '1px solid white';
+                    block.style.boxSizing = 'border-box';
+                    block.style.position = 'absolute';
+                    block.style.left = (x * nextBlockSize) + 'px';
+                    block.style.top = (y * nextBlockSize) + 'px';
+                    pieceWrapper.appendChild(block);
+                }
+            }
+        }
+
+        // Center the piece wrapper within the piece container and add it to the next piece display area.
+        pieceContainer.appendChild(pieceWrapper);
+        nextPieceContainer.appendChild(pieceContainer);
+    }
 }
 
 function drawBlock(x, y, color) {
@@ -186,7 +250,12 @@ function moveDown(){
     } else {
         mergeTetromino();
         removeRow();
-        currentTetromino = getRandomTeromino();
+        // Use the next tetromino as the current one
+        currentTetromino = nextTetromino;
+        // Generate a new next tetromino
+        nextTetromino = getRandomTetromino();
+        // Update the next piece display
+        updateNextPieceDisplay();
         currentPosition = { x: 3, y: 0 };
         if(hasCollision(0, 0)) {
             gameOver = true;
@@ -264,14 +333,30 @@ document.addEventListener('keydown', (e) => {
 
 
 function restartGame() {
+    // Save the current score before restarting if there's a score to save
+    if (score > 0 && !scoreSent) {
+        saveHighScore().finally(() => {
+            // Continue with restart after score is saved
+            performRestart();
+        });
+    } else {
+        // No score to save, restart immediately
+        performRestart();
+    }
+}
+
+function performRestart() {
     // Reload the current page to restart this mock game view.
     board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
-    currentTetromino = getRandomTeromino();
+    // Initialize both current and next tetrominos
+    currentTetromino = getRandomTetromino();
+    nextTetromino = getRandomTetromino();
+    updateNextPieceDisplay();
     currentPosition = { x: 3, y: 0 };
     score = 0;
     intervarl = 400;  // Reset to starting speed
     gameOver = false;
-    scoreSent= false;
+    scoreSent = false;
 
     const scoreElement = document.getElementById('score');
     if (scoreElement) {

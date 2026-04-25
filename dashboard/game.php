@@ -33,7 +33,7 @@
                 <div class="glass-card p-4 h-100 d-flex flex-column">
                     <div class="text-center mb-3">
                         <h6 class="text-info text-uppercase mb-3">Next</h6>
-                        <div class="next-piece-box mx-auto"></div>
+                        <div class="next-piece-box mx-auto" id="nextPiece"></div>
                     </div>
                     <div class="mt-auto">
                         <button class="btn neon-btn w-100" onclick="restartGame()">Restart</button>
