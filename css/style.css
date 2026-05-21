@@ -179,3 +179,224 @@ body {
     border: 1px dashed var(--glass-border);
     border-radius: 10px;
 }
+
+/* ── Multiplayer Blitz Mode ─────────────────────────────────── */
+
+.blitz-menu-card {
+    width: min(100%, 440px);
+    padding: clamp(28px, 6vw, 44px);
+    border-radius: 16px;
+}
+
+.blitz-kicker {
+    color: rgba(0, 243, 255, 0.9);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+}
+
+.blitz-choice-stack {
+    display: grid;
+    gap: 12px;
+}
+
+.blitz-choice-btn {
+    width: 100%;
+    min-height: 76px;
+    padding: 16px 18px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.055);
+    color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    text-align: left;
+    text-decoration: none;
+    transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.blitz-choice-btn span {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.96rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.blitz-choice-btn small {
+    margin-top: 6px;
+    color: rgba(255, 255, 255, 0.58);
+    font-size: 0.85rem;
+    line-height: 1.2;
+}
+
+.blitz-choice-btn:hover {
+    transform: translateY(-1px);
+    border-color: rgba(0, 243, 255, 0.65);
+    background: rgba(0, 243, 255, 0.09);
+    color: white;
+}
+
+.blitz-choice-primary {
+    border-color: rgba(255, 107, 53, 0.65);
+    background: rgba(255, 107, 53, 0.09);
+}
+
+.blitz-link-row {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+}
+
+.blitz-link-row a,
+.blitz-back-btn {
+    color: rgba(255, 255, 255, 0.66);
+    background: transparent;
+    border: 0;
+    padding: 0;
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.blitz-link-row a:hover,
+.blitz-back-btn:hover {
+    color: #00f3ff;
+}
+
+.blitz-back-btn {
+    display: inline-flex;
+    align-self: flex-start;
+}
+
+.blitz-code-input {
+    height: 64px;
+    text-transform: uppercase;
+    letter-spacing: clamp(0.22em, 3vw, 0.42em);
+    font-size: clamp(1.2rem, 5vw, 1.65rem);
+}
+
+.blitz-menu-card .neon-btn {
+    margin-bottom: 0;
+}
+
+/* Blitz neon accent (orange-pink) */
+.neon-blitz {
+    border-color: #ff6b35;
+    color: #ff6b35;
+    box-shadow: 0 0 10px rgba(255, 107, 53, 0.25), inset 0 0 10px rgba(255, 107, 53, 0.1);
+}
+.neon-blitz:hover {
+    background: rgba(255, 107, 53, 0.15);
+    color: #ff6b35;
+    box-shadow: 0 0 22px rgba(255, 107, 53, 0.7), 0 0 44px rgba(255, 107, 53, 0.3);
+}
+
+/* Room code display */
+.blitz-room-code {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(2rem, 11vw, 3rem);
+    font-weight: 700;
+    letter-spacing: clamp(0.18em, 2vw, 0.45em);
+    color: #ff6b35;
+    text-shadow: 0 0 20px rgba(255, 107, 53, 0.8);
+    background: rgba(255, 107, 53, 0.08);
+    border: 1px solid rgba(255, 107, 53, 0.3);
+    border-radius: 12px;
+    padding: 14px 28px;
+    display: inline-block;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.blitz-room-code-small {
+    font-size: clamp(1.1rem, 5vw, 1.45rem);
+    letter-spacing: clamp(0.12em, 1vw, 0.3em);
+    padding: 8px 18px;
+}
+
+/* Countdown number */
+.blitz-countdown {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 9rem;
+    font-weight: 700;
+    color: white;
+    text-shadow: 0 0 60px #ff6b35, 0 0 20px #ff6b35;
+    line-height: 1;
+    animation: blitz-pulse 0.9s ease-in-out infinite;
+}
+@keyframes blitz-pulse {
+    0%, 100% { transform: scale(1);   opacity: 1; }
+    50%       { transform: scale(1.08); opacity: 0.85; }
+}
+
+/* Blitz timer */
+.blitz-timer {
+    font-family: 'Orbitron', monospace;
+    font-size: 2.4rem;
+    font-weight: 700;
+    color: #00f3ff;
+    text-shadow: 0 0 16px rgba(0, 243, 255, 0.7);
+    letter-spacing: 0.05em;
+    transition: color 0.3s, text-shadow 0.3s;
+}
+
+/* My game canvas */
+.blitz-canvas-me {
+    display: block;
+    background: rgba(0, 0, 0, 0.55);
+    border: 2px solid rgba(0, 243, 255, 0.35);
+    border-radius: 8px;
+    box-shadow: 0 0 24px rgba(0, 243, 255, 0.15);
+}
+
+/* Opponent game canvas */
+.blitz-canvas-opp {
+    display: block;
+    background: rgba(0, 0, 0, 0.45);
+    border: 2px solid rgba(255, 107, 53, 0.35);
+    border-radius: 8px;
+    box-shadow: 0 0 16px rgba(255, 107, 53, 0.12);
+    opacity: 0.88;
+}
+
+/* Garbage incoming alert */
+.blitz-garbage-alert {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255, 68, 68, 0.85);
+    color: white;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    padding: 4px 12px;
+    border-radius: 6px;
+    animation: garbage-flash 0.35s ease-in-out infinite alternate;
+    pointer-events: none;
+}
+@keyframes garbage-flash {
+    from { opacity: 1; }
+    to   { opacity: 0.4; }
+}
+
+/* Mobile touch buttons */
+.blitz-touch-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    border-radius: 10px;
+    font-size: 1.4rem;
+    width: 64px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.blitz-touch-btn:active {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}

@@ -1,0 +1,922 @@
+/* Blitz room arena */
+body.blitz-arena-bg {
+    --arena-bg: rgba(6, 9, 18, 0.72);
+    --arena-surface: rgba(10, 16, 30, 0.82);
+    --arena-surface-strong: rgba(14, 23, 40, 0.94);
+    --arena-border: rgba(0, 243, 255, 0.24);
+    --arena-border-warn: rgba(255, 107, 53, 0.34);
+    --arena-muted: rgba(255, 255, 255, 0.68);
+    --arena-line: rgba(255, 255, 255, 0.08);
+    --arena-focus: #ffdd00;
+    height: 100dvh;
+    min-height: 100vh;
+    overflow: hidden;
+    background-color: #070a12;
+}
+
+body.blitz-arena-bg::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+        linear-gradient(rgba(0, 243, 255, 0.055) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 243, 255, 0.045) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0.5));
+    background-size: 48px 48px, 48px 48px, 100% 100%;
+    opacity: 0.9;
+}
+
+.blitz-stage,
+.blitz-game-stage {
+    position: relative;
+    z-index: 1;
+    height: 100dvh;
+    min-height: 0 !important;
+    overflow: hidden;
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+}
+
+.blitz-arena-card {
+    width: min(100%, 560px);
+    max-height: calc(100dvh - 32px);
+    overflow: hidden;
+    padding: 32px;
+    border-radius: 8px;
+    border-color: var(--arena-border);
+    background:
+        linear-gradient(180deg, rgba(0, 243, 255, 0.08), transparent 30%),
+        var(--arena-surface);
+    box-shadow:
+        0 0 0 1px rgba(0, 243, 255, 0.1),
+        0 28px 70px rgba(0, 0, 0, 0.58),
+        inset 0 0 32px rgba(0, 243, 255, 0.04);
+}
+
+.blitz-arena-card .cosmic-title {
+    font-size: 2rem;
+    line-height: 1.15;
+}
+
+.blitz-arena-card .btn {
+    min-height: 48px;
+}
+
+.blitz-kicker {
+    color: rgba(0, 243, 255, 0.9);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+}
+
+.neon-blitz {
+    border-color: #ff6b35;
+    color: #ff6b35;
+    box-shadow: 0 0 10px rgba(255, 107, 53, 0.25), inset 0 0 10px rgba(255, 107, 53, 0.1);
+}
+
+.neon-blitz:hover {
+    background: rgba(255, 107, 53, 0.15);
+    color: #ff6b35;
+    box-shadow: 0 0 22px rgba(255, 107, 53, 0.7), 0 0 44px rgba(255, 107, 53, 0.3);
+}
+
+.blitz-error-text {
+    font-size: 0.95rem;
+}
+
+.blitz-helper-text {
+    font-size: 0.9rem;
+}
+
+.blitz-room-label {
+    font-size: 0.8rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+.blitz-room-code {
+    max-width: 100%;
+    display: inline-block;
+    box-sizing: border-box;
+    padding: 14px 28px;
+    border: 1px solid rgba(255, 107, 53, 0.3);
+    border-radius: 8px;
+    background: rgba(255, 107, 53, 0.08);
+    color: #ff6b35;
+    font-family: 'Orbitron', monospace;
+    font-size: 3rem;
+    font-weight: 700;
+    letter-spacing: 0.24em;
+    text-shadow: 0 0 20px rgba(255, 107, 53, 0.8);
+}
+
+.blitz-room-code-small {
+    padding: 8px 18px;
+    font-size: 1.45rem;
+    letter-spacing: 0.18em;
+}
+
+.blitz-mini-board {
+    position: relative;
+    width: 168px;
+    height: 196px;
+    margin: 0 auto 24px;
+    overflow: hidden;
+    border: 1px solid var(--arena-border);
+    border-radius: 8px;
+    background-color: rgba(0, 0, 0, 0.36);
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.075) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.075) 1px, transparent 1px);
+    background-size: 28px 28px;
+    box-shadow:
+        inset 0 0 24px rgba(0, 243, 255, 0.08),
+        0 0 28px rgba(0, 243, 255, 0.12);
+}
+
+.blitz-mini-board::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, transparent 56%, rgba(0, 243, 255, 0.09));
+}
+
+.blitz-mini-board span {
+    position: absolute;
+    left: calc(var(--x) * 28px);
+    top: calc(var(--y) * 28px);
+    width: 28px;
+    height: 28px;
+    background: var(--c);
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    box-shadow: inset 4px 4px 0 rgba(255, 255, 255, 0.22);
+}
+
+.blitz-mini-board span:nth-child(1) { --x: 0; --y: 4; --c: #00f3ff; }
+.blitz-mini-board span:nth-child(2) { --x: 1; --y: 4; --c: #00f3ff; }
+.blitz-mini-board span:nth-child(3) { --x: 2; --y: 4; --c: #00f3ff; }
+.blitz-mini-board span:nth-child(4) { --x: 3; --y: 4; --c: #00f3ff; }
+.blitz-mini-board span:nth-child(5) { --x: 1; --y: 5; --c: #ff6b35; }
+.blitz-mini-board span:nth-child(6) { --x: 2; --y: 5; --c: #ff6b35; }
+.blitz-mini-board span:nth-child(7) { --x: 2; --y: 6; --c: #ff6b35; }
+.blitz-mini-board span:nth-child(8) { --x: 3; --y: 6; --c: #ff6b35; }
+.blitz-mini-board span:nth-child(9) { --x: 4; --y: 5; --c: #ffdd00; }
+.blitz-mini-board span:nth-child(10) { --x: 5; --y: 5; --c: #ffdd00; }
+.blitz-mini-board span:nth-child(11) { --x: 4; --y: 6; --c: #ffdd00; }
+.blitz-mini-board span:nth-child(12) { --x: 5; --y: 6; --c: #ffdd00; }
+
+.blitz-status-strip {
+    min-height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    max-width: 100%;
+    padding: 10px 16px;
+    border: 1px solid var(--arena-line);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.055);
+    color: rgba(255, 255, 255, 0.82);
+    line-height: 1.3;
+}
+
+.blitz-status-led {
+    width: 10px;
+    height: 10px;
+    flex: 0 0 10px;
+    border-radius: 999px;
+    background: #00ff88;
+    box-shadow: 0 0 12px rgba(0, 255, 136, 0.82);
+    animation: blitz-led-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes blitz-led-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.45; transform: scale(0.82); }
+}
+
+.blitz-versus-row,
+.blitz-result-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 12px;
+    align-items: stretch;
+}
+
+.blitz-result-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.blitz-player-plate {
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid var(--arena-border);
+    border-radius: 8px;
+    background: rgba(0, 243, 255, 0.075);
+}
+
+.blitz-player-plate span {
+    display: block;
+    color: var(--arena-muted);
+    font-size: 0.78rem;
+    line-height: 1.2;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+}
+
+.blitz-player-plate strong {
+    display: block;
+    min-width: 0;
+    margin-top: 6px;
+    overflow-wrap: anywhere;
+    color: white;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.1rem;
+    line-height: 1.2;
+}
+
+.blitz-player-plate-warn {
+    border-color: var(--arena-border-warn);
+    background: rgba(255, 107, 53, 0.08);
+}
+
+.blitz-vs-mark {
+    align-self: center;
+    color: #ff6b35;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    text-shadow: 0 0 16px rgba(255, 107, 53, 0.72);
+}
+
+.blitz-ready-list {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--arena-line);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.055);
+}
+
+.blitz-ready-timer-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.blitz-ready-timer-bar {
+    width: 100%;
+    max-width: 280px;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+}
+
+.blitz-ready-timer-fill {
+    height: 100%;
+    width: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #ff4444, #ffcc00);
+    transition: width 1s linear;
+}
+
+.blitz-cooldown-timer {
+    color: #ffcc00;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 3rem;
+    font-weight: 700;
+    text-shadow: 0 0 20px rgba(255, 204, 0, 0.7);
+    line-height: 1;
+}
+
+.blitz-countdown-wrap {
+    width: min(100%, 460px);
+    padding: 32px;
+    border: 1px solid var(--arena-border-warn);
+    border-radius: 8px;
+    background: rgba(10, 16, 30, 0.58);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+}
+
+.blitz-versus-caption {
+    font-family: 'Orbitron', sans-serif;
+    text-transform: uppercase;
+}
+
+.blitz-countdown {
+    color: white;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 8rem;
+    font-weight: 700;
+    line-height: 1;
+    text-shadow: 0 0 60px #ff6b35, 0 0 20px #ff6b35;
+    animation: blitz-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes blitz-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.08); opacity: 0.85; }
+}
+
+.blitz-game-stage {
+    gap: 12px;
+    padding-top: 12px !important;
+    padding-bottom: max(12px, env(safe-area-inset-bottom)) !important;
+}
+
+.blitz-match-hud {
+    width: min(100%, 760px);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 0;
+}
+
+.blitz-score-card,
+.blitz-timer-card {
+    min-width: 0;
+    min-height: 62px;
+    padding: 10px 14px;
+    border: 1px solid var(--arena-border);
+    border-radius: 8px;
+    background: var(--arena-surface-strong);
+    box-shadow: inset 0 0 20px rgba(0, 243, 255, 0.04);
+}
+
+.blitz-score-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.blitz-score-card span,
+.blitz-timer-card span {
+    color: var(--arena-muted);
+    font-size: 0.78rem;
+    line-height: 1.2;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+}
+
+.blitz-score-card strong {
+    min-width: 0;
+    margin-top: 4px;
+    color: white;
+    font-family: 'Orbitron', monospace;
+    font-size: 1.8rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.blitz-score-card-warn {
+    border-color: var(--arena-border-warn);
+    text-align: right;
+    box-shadow: inset 0 0 20px rgba(255, 107, 53, 0.04);
+}
+
+.blitz-timer-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.blitz-timer {
+    color: #00f3ff;
+    font-family: 'Orbitron', monospace;
+    font-size: 2.4rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.05em;
+    text-shadow: 0 0 16px rgba(0, 243, 255, 0.7);
+    transition: color 0.3s, text-shadow 0.3s;
+}
+
+.blitz-timer-card .blitz-timer {
+    font-size: 2.2rem;
+    line-height: 1;
+}
+
+.blitz-arena-layout {
+    width: min(100%, 980px);
+    display: grid;
+    grid-template-columns: auto minmax(124px, 148px) auto;
+    gap: 12px;
+    align-items: center;
+    justify-content: center;
+}
+
+.blitz-board-column {
+    min-width: 0;
+    display: grid;
+    gap: 8px;
+}
+
+.blitz-board-label {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--arena-border);
+    border-radius: 8px;
+    background: rgba(0, 243, 255, 0.075);
+}
+
+.blitz-board-label span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: white;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.9rem;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+
+.blitz-board-label small {
+    flex: 0 0 auto;
+    color: var(--arena-muted);
+    font-size: 0.78rem;
+    line-height: 1.2;
+}
+
+.blitz-board-label-warn {
+    border-color: var(--arena-border-warn);
+    background: rgba(255, 107, 53, 0.08);
+}
+
+.blitz-board-frame {
+    position: relative;
+    width: 100%;
+    padding: 8px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--arena-line);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.52);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.46);
+}
+
+.blitz-board-frame-main {
+    border-color: rgba(0, 243, 255, 0.34);
+}
+
+.blitz-board-frame-opp {
+    border-color: rgba(255, 107, 53, 0.34);
+}
+
+.blitz-board-frame canvas {
+    max-width: 100%;
+    height: auto;
+}
+
+.blitz-canvas-me,
+.blitz-canvas-opp {
+    display: block;
+    border-radius: 4px;
+}
+
+.blitz-canvas-me {
+    width: auto;
+    height: min(570px, calc(100dvh - 166px));
+    border: 0;
+    background: rgba(0, 0, 0, 0.55);
+    box-shadow: 0 0 24px rgba(0, 243, 255, 0.15);
+}
+
+.blitz-canvas-opp {
+    width: auto;
+    height: min(360px, calc(100dvh - 214px));
+    border: 0;
+    background: rgba(0, 0, 0, 0.45);
+    box-shadow: 0 0 16px rgba(255, 107, 53, 0.12);
+    opacity: 0.88;
+}
+
+.blitz-board-timer {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    z-index: 3;
+    display: grid;
+    min-width: 132px;
+    padding: 8px 14px;
+    transform: translateX(-50%);
+    pointer-events: none;
+    border: 1px solid rgba(0, 243, 255, 0.34);
+    border-radius: 8px;
+    background: rgba(4, 10, 18, 0.5);
+    opacity: 0.5;
+    text-align: center;
+    box-shadow: 0 0 24px rgba(0, 243, 255, 0.18);
+}
+
+.blitz-board-timer span {
+    color: rgba(255, 255, 255, 0.78);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.68rem;
+    line-height: 1;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+}
+
+.blitz-board-timer .blitz-timer {
+    margin-top: 4px;
+    font-size: 2rem;
+    line-height: 1;
+}
+
+.blitz-side-console {
+    min-width: 0;
+    display: grid;
+    gap: 12px;
+}
+
+.blitz-next-panel,
+.blitz-control-card {
+    border: 1px solid var(--arena-line);
+    border-radius: 8px;
+    background: rgba(10, 16, 30, 0.78);
+    padding: 12px;
+}
+
+.blitz-panel-label {
+    margin-bottom: 10px;
+    color: var(--arena-muted);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.76rem;
+    line-height: 1.2;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+}
+
+.blitz-next-piece {
+    width: 100%;
+    min-height: 104px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px dashed rgba(255, 255, 255, 0.16);
+    border-radius: 8px;
+    background:
+        linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+        rgba(0, 0, 0, 0.22);
+    background-size: 16px 16px;
+}
+
+.blitz-control-card dl {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+}
+
+.blitz-control-card dl > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 30px;
+}
+
+.blitz-control-card dt,
+.blitz-control-card dd {
+    margin: 0;
+    line-height: 1.2;
+}
+
+.blitz-control-card dt {
+    color: white;
+    font-weight: 700;
+}
+
+.blitz-control-card dd {
+    color: var(--arena-muted);
+    text-align: right;
+}
+
+.blitz-garbage-alert {
+    position: absolute;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
+    padding: 4px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 6px;
+    background: rgba(255, 68, 68, 0.94);
+    color: white;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    animation: garbage-flash 0.35s ease-in-out infinite alternate;
+}
+
+@keyframes garbage-flash {
+    from { opacity: 1; }
+    to { opacity: 0.4; }
+}
+
+.blitz-mobile-controls {
+    width: min(100%, 396px);
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.blitz-touch-btn {
+    width: auto;
+    min-width: 0;
+    min-height: 52px;
+    height: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-color: rgba(0, 243, 255, 0.34);
+    border-radius: 8px;
+    background: rgba(10, 16, 30, 0.86);
+    color: white;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.78rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.blitz-touch-btn:active {
+    border-color: rgba(255, 107, 53, 0.68);
+    background: rgba(255, 107, 53, 0.18);
+}
+
+.blitz-result-title {
+    color: white;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 3rem;
+    font-weight: 700;
+    line-height: 1;
+    text-shadow: 0 0 30px currentColor;
+}
+
+.blitz-result-grid .blitz-player-plate strong {
+    font-size: 2.4rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.blitz-arena-bg .btn:focus-visible,
+.blitz-arena-bg a:focus-visible,
+.blitz-arena-bg input:focus-visible {
+    outline: 3px solid var(--arena-focus);
+    outline-offset: 3px;
+    box-shadow: none;
+}
+
+@media (max-width: 991.98px) {
+    .blitz-game-stage {
+        justify-content: center !important;
+    }
+
+    .blitz-arena-layout {
+        grid-template-columns: auto minmax(104px, 128px) auto;
+        max-width: 100%;
+        gap: 8px;
+    }
+
+    .blitz-board-column-main {
+        order: initial;
+    }
+
+    .blitz-side-console {
+        order: initial;
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .blitz-board-column-opp {
+        order: initial;
+    }
+
+    .blitz-board-frame-opp {
+        max-width: none;
+        margin: 0 auto;
+    }
+}
+
+@media (max-width: 767.98px) {
+    .blitz-game-stage {
+        gap: 8px;
+        padding-top: 8px !important;
+        padding-bottom: max(8px, env(safe-area-inset-bottom)) !important;
+    }
+
+    .blitz-arena-card {
+        padding: 24px;
+    }
+
+    .blitz-match-hud {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+        max-width: 440px;
+        gap: 8px;
+    }
+
+    .blitz-score-card {
+        min-height: 52px;
+        padding: 8px 10px;
+    }
+
+    .blitz-score-card strong {
+        font-size: 1.35rem;
+    }
+
+    .blitz-score-card-warn {
+        text-align: left;
+    }
+
+    .blitz-arena-layout {
+        width: 100%;
+        max-width: 440px;
+        grid-template-columns: minmax(0, 1fr) minmax(84px, 96px);
+        grid-template-areas:
+            "main side"
+            "main opp";
+        align-items: start;
+    }
+
+    .blitz-board-column-main {
+        grid-area: main;
+    }
+
+    .blitz-side-console {
+        grid-area: side;
+        gap: 8px;
+    }
+
+    .blitz-control-card {
+        display: none;
+    }
+
+    .blitz-board-column-opp {
+        grid-area: opp;
+    }
+
+    .blitz-board-label {
+        min-height: 36px;
+        padding: 8px;
+    }
+
+    .blitz-board-label small {
+        display: none;
+    }
+
+    .blitz-board-frame {
+        padding: 6px;
+    }
+
+    .blitz-canvas-me {
+        width: 100%;
+        height: auto;
+        max-height: calc(100dvh - 150px);
+    }
+
+    .blitz-canvas-opp {
+        width: 100%;
+        height: auto;
+        max-height: 22dvh;
+    }
+
+    .blitz-next-panel {
+        padding: 8px;
+    }
+
+    .blitz-next-piece {
+        min-height: 68px;
+        background-size: 12px 12px;
+    }
+
+    .blitz-board-timer {
+        top: 12px;
+        min-width: 104px;
+        padding: 6px 10px;
+    }
+
+    .blitz-board-timer .blitz-timer {
+        font-size: 1.45rem;
+    }
+
+    .blitz-countdown {
+        font-size: 5.5rem;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .blitz-arena-card .cosmic-title {
+        font-size: 1.55rem;
+    }
+
+    .blitz-room-code {
+        width: 100%;
+        padding: 12px 14px;
+        font-size: 1.55rem;
+        letter-spacing: 0.16em;
+    }
+
+    .blitz-room-code-small {
+        font-size: 1.2rem;
+    }
+
+    .blitz-versus-row {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .blitz-vs-mark {
+        padding: 2px 0;
+    }
+
+    .blitz-result-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .blitz-match-hud {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .blitz-score-card-warn {
+        text-align: right;
+    }
+
+    .blitz-board-label {
+        align-items: center;
+        flex-direction: row;
+    }
+
+    .blitz-mobile-controls {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    .blitz-touch-btn {
+        min-height: 48px;
+        font-size: 0.7rem;
+    }
+
+    .blitz-result-title {
+        font-size: 2.2rem;
+    }
+}
+
+@media (max-height: 680px) {
+    .blitz-arena-card {
+        padding: 20px;
+    }
+
+    .blitz-mini-board {
+        width: 120px;
+        height: 140px;
+        margin-bottom: 16px;
+        background-size: 20px 20px;
+    }
+
+    .blitz-mini-board span {
+        width: 20px;
+        height: 20px;
+        left: calc(var(--x) * 20px);
+        top: calc(var(--y) * 20px);
+    }
+
+    .blitz-room-code {
+        padding: 10px 14px;
+        font-size: 1.7rem;
+    }
+
+    .blitz-ready-list {
+        padding: 10px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .galaxy-bg::before,
+    .blitz-status-led,
+    .blitz-countdown,
+    .blitz-garbage-alert {
+        animation: none;
+    }
+
+    .blitz-choice-btn,
+    .neon-btn {
+        transition: none;
+    }
+
+    .blitz-choice-btn:hover {
+        transform: none;
+    }
+}

@@ -56,9 +56,11 @@ if (isset($_POST['logout'])) {
                 <h1 class="display-4 text-white fw-bold mb-0"><?php echo $auth->getScore($_SESSION['username'] ?? '')
                 ?></h1>
             </div>
-            <div class="d-grid gap-3 d-md-flex justify-content-md-center">
+            <div class="d-grid gap-3 d-md-flex justify-content-md-center flex-wrap">
                 <button class="btn neon-btn btn-large" onclick="location.href='game.php'">Play</button>
+                <button class="btn neon-btn neon-blitz btn-large" onclick="location.href='multiplayer.php'">Blitz Mode</button>
                 <button class="btn neon-btn btn-large" onclick="location.href='leaderboard.php'">Leaderboard</button>
+                <button class="btn neon-btn neon-blitz btn-large" onclick="location.href='blitz_leaderboard.php'">Blitz Rankings</button>
             </div>
             <form method="POST">
                 <button class="btn btn-link text-white mt-4" type="submit" name="logout">Logout</button>

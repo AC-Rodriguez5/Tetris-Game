@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\xampp\\\\htdocs\\\\Tetris\" -Recurse -Force)",
+      "Bash(Select-Object FullName, PSIsContainer)",
+      "Bash(Sort-Object FullName)",
+      "Bash(dir /b dashboard\\\\multiplayer.php script\\\\multiplayer.js css\\\\style.css dashboard\\\\dashboard.php)",
+      "Bash(Get-ChildItem \"C:\\\\xampp\\\\htdocs\\\\Tetris\\\\dashboard\\\\multiplayer.php\",\"C:\\\\xampp\\\\htdocs\\\\Tetris\\\\script\\\\multiplayer.js\")",
+      "Bash(Select-Object Name, Length)",
+      "Bash(php -l C:\\\\xampp\\\\htdocs\\\\Tetris\\\\backEnd\\\\blitz_api.php)",
+      "Bash(php -l C:\\\\xampp\\\\htdocs\\\\Tetris\\\\dbConnect\\\\dbconnect.php)",
+      "PowerShell(& \"C:\\\\xampp\\\\php\\\\php.exe\" -l \"C:\\\\xampp\\\\htdocs\\\\Tetris\\\\backEnd\\\\blitz_api.php\"; & \"C:\\\\xampp\\\\php\\\\php.exe\" -l \"C:\\\\xampp\\\\htdocs\\\\Tetris\\\\dbConnect\\\\dbconnect.php\")",
+      "PowerShell(Get-Process *)",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri 'http://localhost/Tetris/backEnd/blitz_api.php?action=create' -Method POST -Body '{}' -ContentType 'application/json' -UseBasicParsing; \"STATUS: $\\($r.StatusCode\\)\"; \"CONTENT-TYPE: $\\($r.Headers['Content-Type']\\)\"; \"BODY: $\\($r.Content\\)\" } catch { \"ERROR: $\\($_.Exception.Message\\)\"; if \\($_.Exception.Response\\) { $s = $_.Exception.Response.GetResponseStream\\(\\); $r = New-Object IO.StreamReader\\($s\\); \"BODY: $\\($r.ReadToEnd\\(\\)\\)\" } })",
+      "PowerShell(curl.exe -s 'http://localhost/Tetris/dbtest.php' 2>&1)",
+      "PowerShell(\"=== 1st request \\(cold\\) ===\"; curl.exe -s 'http://localhost/Tetris/dbtest.php'; \"\"; \"=== 2nd request \\(warm\\) ===\"; curl.exe -s 'http://localhost/Tetris/dbtest.php'; \"\"; \"=== 3rd request \\(warm\\) ===\"; curl.exe -s 'http://localhost/Tetris/dbtest.php')",
+      "PowerShell(curl.exe -s 'http://localhost/Tetris/apitest.php' 2>&1)",
+      "PowerShell(& 'C:\\\\xampp\\\\php\\\\php.exe' -r \"echo 'session.save_path = ' . ini_get\\('session.save_path'\\) . PHP_EOL;\")",
+      "PowerShell(Remove-Item *)",
+      "Bash(php -l backEnd/blitz_api.php)",
+      "Bash(php -l dashboard/blitz_room.php)",
+      "Bash(node *)",
+      "Read(//c/xampp/php/logs/**)",
+      "Read(//c/xampp/apache/logs/**)",
+      "Bash(php -r ' *)",
+      "Bash(php -l \"C:\\\\xampp\\\\htdocs\\\\Tetris\\\\dashboard\\\\blitz_room\\\\phase_cooldown.php\")",
+      "Bash(php *)"
+    ]
+  }
+}
