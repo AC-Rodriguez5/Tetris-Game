@@ -41,6 +41,14 @@ extension=pgsql
 3. Save the file.
 4. Restart Apache from the XAMPP Control Panel.
 
+Quick check from PowerShell:
+
+```powershell
+C:\xampp\php\php.exe -m | findstr /i "pgsql"
+```
+
+You should see `pdo_pgsql` in the output. If nothing prints, Apache/PHP still cannot use PostgreSQL.
+
 ## 3. Configure the Database Connection
 
 Database settings are in:
@@ -189,4 +197,3 @@ Run the `CREATE TABLE IF NOT EXISTS "TetrisGame"` SQL from step 4.
 ### CSS or Bootstrap looks broken
 
 The app loads some assets from CDNs. Make sure the computer has internet access, then hard refresh the page with `Ctrl + F5`.
-

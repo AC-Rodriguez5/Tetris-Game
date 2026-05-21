@@ -7,7 +7,11 @@ class tetrisgame {
         $dbcon = new dbcon();
         $this->db = $dbcon->dbconnect();
         if ($this->db === null) {
-            die("Database connection failed. Please check your database configuration.");
+            $message = "Database connection failed.";
+            if (!empty($dbcon->lastError)) {
+                $message .= " " . $dbcon->lastError;
+            }
+            die(htmlspecialchars($message, ENT_QUOTES, 'UTF-8'));
         }
     }
 
