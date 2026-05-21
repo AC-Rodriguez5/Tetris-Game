@@ -13,15 +13,16 @@ if (canvas && ctx) {
     canvas.height = ROWS * BLOCK_SIZE; // 750px tall
 }
 
-// Define Tetris shapes and colors
+// Tetromino shapes and colors per the standard Tetris guideline (SRS):
+// I=cyan, O=yellow, J=blue, L=orange, S=green, Z=red, T=purple.
 const TETROMINOES = [
-    { color: 'cyan', shape:[[1, 1, 1, 1]] },
-    { color: 'blue', shape:[[1, 1], [1, 1]] },
-    { color: 'orange', shape:[[1, 1, 1],[1, 0, 0]] },
-    { color: 'yellow', shape:[[1, 1, 1],[0, 0, 1]] },
-    { color: 'green', shape:[[1, 1, 0], [0, 1, 1]] },
-    { color: 'red', shape:[[0, 1, 1], [1, 1, 0]] },
-    { color: 'purple', shape:[[0, 1, 0], [1, 1, 1]] },
+    { color: 'cyan',   shape: [[1, 1, 1, 1]] },             // I
+    { color: 'yellow', shape: [[1, 1], [1, 1]] },           // O
+    { color: 'blue',   shape: [[1, 1, 1], [1, 0, 0]] },     // J
+    { color: 'orange', shape: [[1, 1, 1], [0, 0, 1]] },     // L
+    { color: 'green',  shape: [[0, 1, 1], [1, 1, 0]] },     // S
+    { color: 'red',    shape: [[1, 1, 0], [0, 1, 1]] },     // Z
+    { color: 'purple', shape: [[0, 1, 0], [1, 1, 1]] },     // T
 ]
 
 // Game state variables
@@ -30,7 +31,7 @@ let currentTetromino = null;
 let nextTetromino = null;
 let currentPosition = { x: 3, y: 0 }; // Start near the top center
 let score = 0;
-let intervarl = 400;  // Starting interval
+let interval = 400;  // Starting interval
 let gameOver = false;
 let speedIncreaseInterval = 5000;  // Increase speed every 5 seconds (was 10000)
 let lastSpeedIncreaseTime = Date.now();
@@ -46,6 +47,11 @@ function initializeTetrominos() {
 initializeTetrominos();
 
 
+function getCsrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.content : '';
+}
+
 function saveHighScore() {
     // Send the final score to the server using a POST request and return the Promise.
     return fetch("../dashboard/dashboard.php", {
@@ -53,7 +59,7 @@ function saveHighScore() {
         headers: {
             "Content-Type": "application/json"
         },
-        body: JSON.stringify({ score: score })
+        body: JSON.stringify({ score: score, csrf_token: getCsrfToken() })
     })
     .then(response => response.json())
     .then(data => {
@@ -81,8 +87,10 @@ function quitGame() {
 }
 
 function getRandomTetromino() {
-    // Randomly select a tetromino from the predefined list and return it to be used as the current piece in the game.
-    return TETROMINOES[Math.floor(Math.random() * TETROMINOES.length)];
+    // Randomly select a tetromino from the predefined list and return a deep copy so
+    // rotations on the active piece don't mutate the shared TETROMINOES template.
+    const piece = TETROMINOES[Math.floor(Math.random() * TETROMINOES.length)];
+    return { color: piece.color, shape: piece.shape.map(row => row.slice()) };
 }
 
 function updateNextPieceDisplay() {
@@ -182,13 +190,11 @@ function hasCollision(offsetX , offsetY ) {
     const shape = currentTetromino.shape;
     for(let y = 0; y < shape.length; y++) {
         for(let x = 0; x < shape[y].length; x++) {
-            if(shape[y][x] && (currentPosition.x + x + offsetX < 0 || 
-                currentPosition.x + x + offsetX >= COLS || 
-                currentPosition.y + y + offsetY >= ROWS || 
-                board[currentPosition.y + y + offsetY]
-                [currentPosition.x + x + offsetX])) {
-                    return true;
-                }
+            if (!shape[y][x]) continue;
+            const nextX = currentPosition.x + x + offsetX;
+            const nextY = currentPosition.y + y + offsetY;
+            if (nextX < 0 || nextX >= COLS || nextY >= ROWS) return true;
+            if (nextY >= 0 && board[nextY][nextX]) return true;
         }
     }
     return false;
@@ -259,7 +265,9 @@ function moveDown(){
         currentPosition = { x: 3, y: 0 };
         if(hasCollision(0, 0)) {
             gameOver = true;
-            alert('Game Over! Your score: ' + score);
+            // Defer the alert so the game loop can save the score on the next frame
+            // and the user sees the final board state before the modal appears.
+            setTimeout(() => alert('Game Over! Your score: ' + score), 50);
         }
     }
 
@@ -279,7 +287,7 @@ function incrementSpeed() {
     // it reduces the interval (down to a minimum threshold) and updates the last speed increase time.
     const now = Date.now();
     if (now - lastSpeedIncreaseTime >= speedIncreaseInterval) {
-        intervarl = Math.max(500, intervarl - 20);
+        interval = Math.max(120, interval - 20);
         lastSpeedIncreaseTime = now;
     }
 }
@@ -299,7 +307,7 @@ function gameLoop(currentTime = performance.now()) {
     }
     
     // Only move down at the specified interval for smooth animation
-    if (currentTime - lastMoveTime >= intervarl) {
+    if (currentTime - lastMoveTime >= interval) {
         moveDown();
         lastMoveTime = currentTime;
     }
@@ -354,7 +362,7 @@ function performRestart() {
     updateNextPieceDisplay();
     currentPosition = { x: 3, y: 0 };
     score = 0;
-    intervarl = 400;  // Reset to starting speed
+    interval = 400;  // Reset to starting speed
     gameOver = false;
     scoreSent = false;
 

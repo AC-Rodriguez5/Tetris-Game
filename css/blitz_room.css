@@ -920,3 +920,52 @@ body.blitz-arena-bg::after {
         transform: none;
     }
 }
+
+/* Topped-out banners during gameplay */
+.blitz-topped-banner {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.78);
+    border: 1px solid rgba(255, 107, 53, 0.55);
+    color: #ffd9a8;
+    padding: 0.9rem 1.4rem;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 0 24px rgba(255, 107, 53, 0.35);
+    pointer-events: none;
+    z-index: 5;
+}
+.blitz-topped-banner strong {
+    display: block;
+    font-size: 1.05rem;
+    letter-spacing: 1px;
+    color: #ff9a4d;
+    text-transform: uppercase;
+    margin-bottom: 0.25rem;
+}
+.blitz-topped-banner span {
+    display: block;
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.72);
+}
+.blitz-topped-banner-opp {
+    font-size: 0.72rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 0.45rem 0.7rem;
+}
+
+/* Rematch invite / waiting cards on the result screen */
+.blitz-rematch-invite,
+.blitz-rematch-waiting {
+    background: rgba(0, 243, 255, 0.08);
+    border: 1px solid rgba(0, 243, 255, 0.32);
+    border-radius: 12px;
+    padding: 0.85rem 1rem;
+}
+.blitz-rematch-invite p,
+.blitz-rematch-waiting p {
+    color: #d9faff;
+}

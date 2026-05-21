@@ -25,6 +25,10 @@
                 </div>
                 <canvas id="myCanvas" class="blitz-canvas-me"></canvas>
                 <div id="garbageAlert" class="blitz-garbage-alert" style="display:none">INCOMING!</div>
+                <div id="myToppedBanner" class="d-none blitz-topped-banner" aria-live="polite">
+                    <strong>You topped out</strong>
+                    <span>Watching opponent until time runs out</span>
+                </div>
             </div>
         </section>
 
@@ -51,6 +55,9 @@
             </div>
             <div class="blitz-board-frame blitz-board-frame-opp">
                 <canvas id="oppCanvas" class="blitz-canvas-opp"></canvas>
+                <div id="oppToppedBanner" class="d-none blitz-topped-banner blitz-topped-banner-opp" aria-live="polite">
+                    Opponent topped out
+                </div>
             </div>
         </section>
     </div>

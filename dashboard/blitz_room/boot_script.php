@@ -3,6 +3,7 @@
     const MY_USERNAME = <?php echo json_encode($currentUsername); ?>;
     const BLITZ_MODE = <?php echo json_encode($mode); ?>;
     const INITIAL_ROOM_CODE = <?php echo json_encode($initialCode); ?>;
+    const CSRF_TOKEN = <?php echo json_encode($currentCsrfToken); ?>;
 
     function retryBlitzRoom() {
         if (typeof stopAllPolls === 'function') stopAllPolls();

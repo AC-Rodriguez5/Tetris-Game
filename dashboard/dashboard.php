@@ -4,25 +4,43 @@ include '../backEnd/tetrisgame.php';
 
 $auth = new tetrisgame();
 
-// Handle AJAX score updates first (before any HTML output)
+// Check login status before doing anything else so score updates from anonymous
+// requests can't pollute the database with empty usernames.
+if (!isset($_SESSION['is_logged_in']) || $_SESSION['is_logged_in'] !== true) {
+    $data = json_decode(file_get_contents('php://input'), true);
+    if (!empty($data['score'])) {
+        header('Content-Type: application/json');
+        http_response_code(401);
+        echo json_encode(['success' => false, 'error' => 'Not logged in.']);
+        exit();
+    }
+    $_SESSION['msg'] = "Please log in to access the dashboard.";
+    header("Location: login.php");
+    exit();
+}
+
+// Handle AJAX score updates after auth (before any HTML output)
 $data = json_decode(file_get_contents('php://input'), true);
 $newscore = $data['score'] ?? 0;
 $username = $_SESSION['username'] ?? '';
 
 if ($newscore > 0) {
+    // CSRF: token must be present and match the one minted for this session.
+    $clientToken = $data['csrf_token'] ?? '';
+    $sessionToken = $_SESSION['csrf_token'] ?? '';
+    if (!is_string($clientToken) || $sessionToken === '' || !hash_equals($sessionToken, $clientToken)) {
+        header('Content-Type: application/json');
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Invalid CSRF token.']);
+        exit();
+    }
+
     $updatedScore = $auth->UpdateScore($username, $newscore);
     $_SESSION['score'] = $updatedScore;
 
     // Send JSON response for AJAX request
     header('Content-Type: application/json');
     echo json_encode(['success' => true, 'score' => $updatedScore]);
-    exit();
-}
-
-// Check login status
-if (!isset($_SESSION['is_logged_in']) || $_SESSION['is_logged_in'] !== true) {
-    $_SESSION['msg'] = "Please log in to access the dashboard.";
-    header("Location: login.php");
     exit();
 }
 

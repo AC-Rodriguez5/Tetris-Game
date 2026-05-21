@@ -18,3 +18,8 @@ if ($mode === 'join' && strlen($initialCode) !== 6) {
 }
 
 $currentUsername = $_SESSION['username'] ?? 'Player';
+
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
+}
+$currentCsrfToken = $_SESSION['csrf_token'];

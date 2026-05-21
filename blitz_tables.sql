@@ -26,6 +26,12 @@ CREATE TABLE IF NOT EXISTS blitz_rooms (
 -- Run this on existing deployments to add the rematch column:
 ALTER TABLE blitz_rooms ADD COLUMN IF NOT EXISTS rematch_code VARCHAR(8);
 
+-- Rematch invite + limit metadata (added later):
+ALTER TABLE blitz_rooms ADD COLUMN IF NOT EXISTS rematch_count INTEGER DEFAULT 0;
+ALTER TABLE blitz_rooms ADD COLUMN IF NOT EXISTS rematch_requested_by VARCHAR(100);
+ALTER TABLE blitz_rooms ADD COLUMN IF NOT EXISTS rematch_requested_at TIMESTAMPTZ;
+ALTER TABLE blitz_rooms ADD COLUMN IF NOT EXISTS rematch_declined INTEGER DEFAULT 0;
+
 CREATE TABLE IF NOT EXISTS blitz_leaderboard (
     username    VARCHAR(100) PRIMARY KEY,
     wins        INTEGER      DEFAULT 0,

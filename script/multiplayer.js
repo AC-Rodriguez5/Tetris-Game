@@ -5,14 +5,15 @@ const OPP_BS = 24;
 const BLITZ_SECS = 120;
 const API_URL = '../backEnd/blitz_api.php';
 
+// SRS-standard colors: I=cyan, O=yellow, J=blue, L=orange, S=green, Z=red, T=purple.
 const PIECES = [
-    { color: 'cyan', shape: [[1, 1, 1, 1]] },
-    { color: '#4488ff', shape: [[1, 1], [1, 1]] },
-    { color: 'orange', shape: [[1, 1, 1], [1, 0, 0]] },
-    { color: '#ffdd00', shape: [[1, 1, 1], [0, 0, 1]] },
-    { color: '#00dd66', shape: [[1, 1, 0], [0, 1, 1]] },
-    { color: '#ff4444', shape: [[0, 1, 1], [1, 1, 0]] },
-    { color: '#cc44ff', shape: [[0, 1, 0], [1, 1, 1]] },
+    { color: 'cyan',    shape: [[1, 1, 1, 1]] },            // I
+    { color: '#ffdd00', shape: [[1, 1], [1, 1]] },          // O
+    { color: '#4488ff', shape: [[1, 1, 1], [1, 0, 0]] },    // J
+    { color: 'orange',  shape: [[1, 1, 1], [0, 0, 1]] },    // L
+    { color: '#00dd66', shape: [[0, 1, 1], [1, 1, 0]] },    // S
+    { color: '#ff4444', shape: [[1, 1, 0], [0, 1, 1]] },    // Z
+    { color: '#cc44ff', shape: [[0, 1, 0], [1, 1, 1]] },    // T
 ];
 
 const GARBAGE_TABLE = [0, 0, 1, 2, 4];
@@ -45,6 +46,17 @@ let syncInFlight = false;
 let syncFailures = 0;
 let pendingGarbageToSend = 0;
 let lastOppGarbageSeen = 0;
+
+const REMATCH_LIMIT = 2;
+const REMATCH_INVITE_TTL = 15;
+
+let resultPollHandle = null;
+let inviteTimerHandle = null;
+let inviteDeadline = 0;
+let rematchRole = null;          // 'requester' | 'invitee' | null
+let pendingRematchCode = null;   // new room code, once allocated
+let rematchHandled = false;      // navigated/cleaned up already
+let resultRematchCount = 0;      // rematch_count of the room we just played
 
 let myCanvas = null;
 let myCtx = null;
@@ -176,6 +188,11 @@ function resetMatchState() {
     scoreSaved = false;
     timerSecs = BLITZ_SECS;
     garbageQueue = [];
+    rematchRole = null;
+    pendingRematchCode = null;
+    rematchHandled = false;
+    resultRematchCount = 0;
+    inviteDeadline = 0;
     setText('myScoreDisplay', '0');
     setText('oppScoreDisplay', '0');
     setText('timerDisplay', '2:00');
@@ -193,11 +210,15 @@ function stopAllPolls() {
     clearInterval(readyTimerHandle);
     clearInterval(syncHandle);
     clearInterval(timerHandle);
+    clearInterval(resultPollHandle);
+    clearInterval(inviteTimerHandle);
     lobbyPollHandle = null;
     readyPollHandle = null;
     readyTimerHandle = null;
     syncHandle = null;
     timerHandle = null;
+    resultPollHandle = null;
+    inviteTimerHandle = null;
 }
 
 async function initBlitzPage(mode, initialCode) {
@@ -398,7 +419,7 @@ function startCountdown() {
     setReadyLabels(true, true);
     showPhase('countdownPhase');
 
-    let count = 3;
+    let count = 5;
     setText('countdownNum', String(count));
     const countdownHandle = setInterval(() => {
         count -= 1;
@@ -447,7 +468,7 @@ function startGame() {
     setText('oppScoreDisplay', '0');
     drawNextPiece();
     startTimer();
-    syncHandle = setInterval(syncRoom, 350);
+    syncHandle = setInterval(syncRoom, 200);
     syncRoom();
 
     lastDropTime = performance.now();
@@ -476,6 +497,26 @@ function updateTimerEl() {
     el.style.textShadow = timerSecs <= 10 ? '0 0 18px #ff4444' : '';
 }
 
+function boardSnapshot() {
+    // Copy the locked board and overlay the active tetromino so the opponent
+    // sees the falling piece in real time instead of only the settled blocks.
+    const snapshot = myBoard.map(row => row.slice());
+    if (cur && !gameOver) {
+        const { shape, color } = cur;
+        for (let y = 0; y < shape.length; y += 1) {
+            for (let x = 0; x < shape[y].length; x += 1) {
+                if (!shape[y][x]) continue;
+                const by = pos.y + y;
+                const bx = pos.x + x;
+                if (by >= 0 && by < ROWS && bx >= 0 && bx < COLS) {
+                    snapshot[by][bx] = color;
+                }
+            }
+        }
+    }
+    return snapshot;
+}
+
 async function syncRoom() {
     if (!currentRoomCode || syncInFlight || resultShown) return;
     syncInFlight = true;
@@ -484,7 +525,7 @@ async function syncRoom() {
     try {
         const data = await blitzApi('sync', {
             code: currentRoomCode,
-            board: myBoard,
+            board: boardSnapshot(),
             score: myScore,
             alive: gameOver ? 0 : 1,
             garbage,
@@ -526,6 +567,15 @@ function applySyncResponse(data) {
         lastOppGarbageSeen = oppGarbage;
     }
 
+    // Visual marker on the rival board when they top out — game keeps going.
+    updateOppToppedOutBanner(Number(data.opp_alive) === 0);
+
+    // Capture rematch_count from the current room so the result screen can
+    // immediately decide whether the Rematch button should be visible.
+    if (typeof data.rematch_count === 'number') {
+        resultRematchCount = data.rematch_count;
+    }
+
     if (data.status === 'finished' && !resultShown) {
         const title = data.winner === MY_USERNAME
             ? 'YOU WIN!'
@@ -534,14 +584,15 @@ function applySyncResponse(data) {
         return;
     }
 
-    if (Number(data.opp_alive) === 0 && !gameOver) {
-        finishLocal('YOU WIN!', data.winner || MY_USERNAME);
-        return;
-    }
-
     if (data.opp_disconnected && !gameOver) {
         finishByReason('OPPONENT LEFT', 'disconnected');
     }
+}
+
+function updateOppToppedOutBanner(isToppedOut) {
+    const banner = byId('oppToppedBanner');
+    if (!banner) return;
+    banner.classList.toggle('d-none', !isToppedOut || resultShown);
 }
 
 function gameLoop(timestamp) {
@@ -751,9 +802,10 @@ function endGame(reason) {
     gameOver = true;
     gameEndReason = reason;
     clearInterval(timerHandle);
-    clearInterval(syncHandle);
     timerHandle = null;
-    syncHandle = null;
+    // Important: keep syncHandle running. The room may still be playing
+    // (single-side topped_out) so we need to learn when the other player
+    // finishes via the next sync that flips status to 'finished'.
 
     if (!scoreSaved) {
         scoreSaved = true;
@@ -761,12 +813,54 @@ function endGame(reason) {
     }
 
     if (reason === 'TOPPED_OUT') {
-        finishByReason('YOU LOST', 'topped_out');
+        showMyToppedSpectator();
+        reportEnd('topped_out');
+    } else if (reason === 'TIME_UP') {
+        reportEnd('time_up');
     } else {
-        finishByReason(null, 'time_up');
+        // disconnect / other client-driven exits still need the server told.
+        finishByReason(null, reason === 'OPPONENT_DISCONNECT' ? 'disconnected' : 'time_up');
     }
 }
 
+async function reportEnd(apiReason) {
+    try {
+        const data = await blitzApi('end', {
+            code: currentRoomCode,
+            score: myScore,
+            reason: apiReason,
+        });
+
+        if (data && data.finalized) {
+            // Room is over right now (e.g., both topped out, or I'm the
+            // surviving player and the timer hit zero) → render final result.
+            const winner = data.winner || null;
+            const title = winner === MY_USERNAME
+                ? 'YOU WIN!'
+                : (winner ? 'YOU LOST' : scoreTitle());
+            stopSyncForResult();
+            showResultScreen(title, myScore, oppScore);
+        }
+        // else: room still playing — sit in spectator mode and let the
+        // sync poller deliver status='finished' when the opponent's clock runs out.
+    } catch (error) {
+        // Network failure: don't strand the player. Show local result.
+        stopSyncForResult();
+        showResultScreen(scoreTitle(), myScore, oppScore);
+    }
+}
+
+function stopSyncForResult() {
+    clearInterval(syncHandle);
+    syncHandle = null;
+}
+
+function showMyToppedSpectator() {
+    const banner = byId('myToppedBanner');
+    if (banner) banner.classList.remove('d-none');
+}
+
+// Legacy entry point retained for disconnect path.
 async function finishByReason(localTitle, apiReason) {
     try {
         const data = await blitzApi('end', {
@@ -776,29 +870,36 @@ async function finishByReason(localTitle, apiReason) {
         });
 
         if (localTitle) {
+            stopSyncForResult();
             showResultScreen(localTitle, myScore, oppScore);
             return;
         }
 
-        const winner = data.winner || null;
-        const title = winner === MY_USERNAME
-            ? 'YOU WIN!'
-            : (winner ? 'YOU LOST' : scoreTitle());
-        showResultScreen(title, myScore, oppScore);
+        if (data && data.finalized) {
+            const winner = data.winner || null;
+            const title = winner === MY_USERNAME
+                ? 'YOU WIN!'
+                : (winner ? 'YOU LOST' : scoreTitle());
+            stopSyncForResult();
+            showResultScreen(title, myScore, oppScore);
+        }
     } catch (error) {
+        stopSyncForResult();
         showResultScreen(localTitle || scoreTitle(), myScore, oppScore);
     }
 }
 
-function finishLocal(title) {
+function finishLocal(title, winner) {
     if (resultShown) return;
     gameOver = true;
     clearInterval(timerHandle);
-    clearInterval(syncHandle);
     timerHandle = null;
-    syncHandle = null;
+    stopSyncForResult();
     saveHighScore(myScore);
-    showResultScreen(title || scoreTitle(), myScore, oppScore);
+    const resolved = title || (winner
+        ? (winner === MY_USERNAME ? 'YOU WIN!' : 'YOU LOST')
+        : scoreTitle());
+    showResultScreen(resolved, myScore, oppScore);
 }
 
 function scoreTitle() {
@@ -823,6 +924,193 @@ function showResultScreen(title, me, opp) {
     setText('finalOppScore', String(opp));
     setText('finalOppNameLabel', oppName);
     showPhase('resultPhase');
+
+    // Reset rematch UI to default visible-state.
+    rematchRole = null;
+    pendingRematchCode = null;
+    rematchHandled = false;
+    hideRematchSubpanels();
+    refreshRematchLimitUI();
+
+    // Start polling the old room for opponent's rematch action.
+    startResultPoll();
+}
+
+function hideRematchSubpanels() {
+    ['rematchInvite', 'rematchWaiting', 'rematchDeclined', 'rematchExpired'].forEach(id => {
+        const el = byId(id);
+        if (el) el.classList.add('d-none');
+    });
+}
+
+function refreshRematchLimitUI() {
+    const reached = resultRematchCount >= REMATCH_LIMIT;
+    const btn = byId('rematchBtn');
+    if (btn) btn.classList.toggle('d-none', reached);
+    const limitEl = byId('rematchLimit');
+    if (limitEl) limitEl.classList.toggle('d-none', !reached);
+}
+
+function startResultPoll() {
+    clearInterval(resultPollHandle);
+    resultPollHandle = setInterval(pollResultRoom, 1000);
+    pollResultRoom();
+}
+
+async function pollResultRoom() {
+    if (!currentRoomCode || !resultShown || rematchHandled) return;
+    try {
+        const data = await blitzApi('poll', { code: currentRoomCode });
+        handleResultPoll(data);
+    } catch (error) {
+        // Transient — keep polling.
+    }
+}
+
+function handleResultPoll(data) {
+    if (!data) return;
+    resultRematchCount = Number(data.rematch_count || 0);
+    refreshRematchLimitUI();
+
+    const requester = data.rematch_requested_by || null;
+    const declined  = Number(data.rematch_declined || 0) === 1;
+    const expired   = Boolean(data.rematch_expired);
+    const accepted  = Boolean(data.rematch_accepted);
+    const code      = data.rematch_code || null;
+
+    // I requested → check for acceptance / decline / expiry.
+    if (rematchRole === 'requester') {
+        if (accepted && code && !rematchHandled) {
+            rematchHandled = true;
+            stopAllPolls();
+            window.location.href = 'blitz_room.php?mode=join&code=' + encodeURIComponent(code);
+            return;
+        }
+        if (declined && !rematchHandled) {
+            rematchHandled = true;
+            clearInterval(inviteTimerHandle); inviteTimerHandle = null;
+            hideRematchSubpanels();
+            const el = byId('rematchDeclined'); if (el) el.classList.remove('d-none');
+            return;
+        }
+        if (expired && !rematchHandled) {
+            rematchHandled = true;
+            clearInterval(inviteTimerHandle); inviteTimerHandle = null;
+            hideRematchSubpanels();
+            const el = byId('rematchExpired'); if (el) el.classList.remove('d-none');
+            return;
+        }
+        return;
+    }
+
+    // Opponent requested → show invite if I haven't responded yet.
+    if (requester && requester !== MY_USERNAME && !declined && !expired
+        && !rematchHandled && rematchRole === null) {
+        rematchRole = 'invitee';
+        pendingRematchCode = code;
+        showRematchInvite(requester, data.rematch_requested_at);
+    }
+}
+
+function showRematchInvite(fromUsername, requestedAt) {
+    hideRematchSubpanels();
+    setText('rematchInviteFrom', fromUsername || 'Opponent');
+    const el = byId('rematchInvite');
+    if (el) el.classList.remove('d-none');
+
+    // Compute remaining TTL based on the server-reported request time so
+    // both sides agree on the deadline within network skew.
+    const base = requestedAt ? Date.parse(requestedAt) : Date.now();
+    inviteDeadline = base + REMATCH_INVITE_TTL * 1000;
+    runInviteCountdown('rematchInviteCountdown', () => {
+        // Auto-decline on timeout.
+        declineRematch();
+    });
+
+    const btn = byId('rematchBtn');
+    if (btn) btn.classList.add('d-none');
+}
+
+function showRematchWaiting() {
+    hideRematchSubpanels();
+    const el = byId('rematchWaiting');
+    if (el) el.classList.remove('d-none');
+    inviteDeadline = Date.now() + REMATCH_INVITE_TTL * 1000;
+    runInviteCountdown('rematchWaitingCountdown', null);
+    const btn = byId('rematchBtn');
+    if (btn) btn.classList.add('d-none');
+}
+
+function runInviteCountdown(displayId, onZero) {
+    clearInterval(inviteTimerHandle);
+    inviteTimerHandle = setInterval(() => {
+        const remaining = Math.max(0, Math.ceil((inviteDeadline - Date.now()) / 1000));
+        setText(displayId, String(remaining));
+        if (remaining <= 0) {
+            clearInterval(inviteTimerHandle);
+            inviteTimerHandle = null;
+            if (typeof onZero === 'function') onZero();
+        }
+    }, 250);
+}
+
+async function requestRematch() {
+    if (rematchRole) return;
+    if (resultRematchCount >= REMATCH_LIMIT) return;
+    rematchRole = 'requester';
+    showRematchWaiting();
+
+    try {
+        const data = await blitzApi('rematch_request', { code: currentRoomCode });
+        pendingRematchCode = data.rematch_code;
+        // Result poll will pick up acceptance/decline/expiry from now on.
+    } catch (error) {
+        rematchRole = null;
+        rematchHandled = false;
+        hideRematchSubpanels();
+        const status = byId('rematchStatus');
+        if (status) {
+            status.textContent = friendlyError(error);
+            status.style.display = '';
+        }
+        const btn = byId('rematchBtn');
+        if (btn) btn.classList.remove('d-none');
+    }
+}
+
+async function acceptRematch() {
+    if (rematchHandled) return;
+    rematchHandled = true;
+    clearInterval(inviteTimerHandle); inviteTimerHandle = null;
+
+    try {
+        const data = await blitzApi('rematch_accept', { code: currentRoomCode });
+        const code = data.rematch_code || pendingRematchCode;
+        if (!code) throw new Error('No rematch code returned.');
+        stopAllPolls();
+        window.location.href = 'blitz_room.php?mode=join&code=' + encodeURIComponent(code);
+    } catch (error) {
+        rematchHandled = false;
+        const status = byId('rematchStatus');
+        if (status) {
+            status.textContent = friendlyError(error);
+            status.style.display = '';
+        }
+    }
+}
+
+async function declineRematch() {
+    if (rematchHandled) return;
+    rematchHandled = true;
+    clearInterval(inviteTimerHandle); inviteTimerHandle = null;
+    hideRematchSubpanels();
+    const el = byId('rematchDeclined');
+    if (el) el.classList.remove('d-none');
+    try {
+        await blitzApi('rematch_decline', { code: currentRoomCode });
+    } catch (error) {
+        // ignore — server may already have timed out the invite.
+    }
 }
 
 function saveHighScore(score) {
@@ -831,7 +1119,7 @@ function saveHighScore(score) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ score }),
+        body: JSON.stringify({ score, csrf_token: typeof CSRF_TOKEN === 'string' ? CSRF_TOKEN : '' }),
     }).catch(() => {});
 }
 
@@ -853,36 +1141,6 @@ function copyRoomCode() {
     }
 }
 
-async function startRematch() {
-    const button = byId('rematchBtn');
-    const status = byId('rematchStatus');
-    if (button) button.disabled = true;
-    if (status) {
-        status.textContent = 'Creating rematch...';
-        status.style.display = '';
-    }
-
-    try {
-        const data = await blitzApi('rematch', { code: currentRoomCode });
-        const code = data.rematch_code;
-        if (!code) throw new Error('Could not create rematch room.');
-        if (data.is_host) {
-            resetMatchState();
-            currentMode = 'create';
-            currentRoomCode = code;
-            myPlayer = 1;
-            setText('roomCodeBig', currentRoomCode);
-            setText('readyRoomCode', currentRoomCode);
-            showWaitingForOpponent();
-            startLobbyPoll();
-            return;
-        }
-        window.location.href = 'blitz_room.php?mode=join&code=' + encodeURIComponent(code);
-    } catch (error) {
-        if (status) status.textContent = friendlyError(error);
-        if (button) button.disabled = false;
-    }
-}
 
 document.addEventListener('keydown', event => {
     if (!gameStarted || gameOver || !isPhaseVisible('gamePhase')) return;

@@ -1,13 +1,3 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leaderboard - Cosmic Tetris</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="../css/style.css">
-</head>
-
 <?php
 session_start();
 if (!isset($_SESSION['is_logged_in']) || $_SESSION['is_logged_in'] !== true) {
@@ -17,9 +7,16 @@ if (!isset($_SESSION['is_logged_in']) || $_SESSION['is_logged_in'] !== true) {
 }
 include '../backEnd/tetrisgame.php';
 $auth = new tetrisgame();
-
-
 ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaderboard - Cosmic Tetris</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="../css/style.css">
+</head>
 
 <body class="galaxy-bg">
     <div class="container min-vh-100 d-flex flex-column justify-content-center align-items-center py-4">
@@ -42,6 +39,7 @@ $auth = new tetrisgame();
                             <!-- Backend will populate this with PHP -->
                             <?php
                             foreach($auth->getLeaderboard() as $index => $entry) {
+                                echo "<tr>";
                                 echo "<td>" . ($index + 1) . "</td>";
                                 echo "<td>" . htmlspecialchars($entry['username']) . "</td>";
                                 echo "<td>" . htmlspecialchars($entry['score']) . "</td>";
@@ -76,6 +74,7 @@ $auth = new tetrisgame();
                             <span class="display-6 text-white fw-bold" id="position-diff"><?php echo($_SESSION['username']); ?></span>
                             <small class="text-info">Commander</small>
                         </div>
+                    </div>
                 </div>
             </div>
             <br>
