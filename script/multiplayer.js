@@ -1,361 +1,555 @@
-// ─── Constants ───────────────────────────────────────────────────────────────
-const ROWS        = 15;
-const COLS        = 10;
-const MY_BS       = 38;   // block size — my board
-const OPP_BS      = 24;   // block size — opponent board
-const BLITZ_SECS  = 120;  // 2-minute blitz
+const ROWS = 15;
+const COLS = 10;
+const MY_BS = 38;
+const OPP_BS = 24;
+const BLITZ_SECS = 120;
+const API_URL = '../backEnd/blitz_api.php';
 
 const PIECES = [
-    { color: 'cyan',    shape: [[1,1,1,1]] },
-    { color: '#4488ff', shape: [[1,1],[1,1]] },
-    { color: 'orange',  shape: [[1,1,1],[1,0,0]] },
-    { color: '#ffdd00', shape: [[1,1,1],[0,0,1]] },
-    { color: '#00dd66', shape: [[1,1,0],[0,1,1]] },
-    { color: '#ff4444', shape: [[0,1,1],[1,1,0]] },
-    { color: '#cc44ff', shape: [[0,1,0],[1,1,1]] },
+    { color: 'cyan', shape: [[1, 1, 1, 1]] },
+    { color: '#4488ff', shape: [[1, 1], [1, 1]] },
+    { color: 'orange', shape: [[1, 1, 1], [1, 0, 0]] },
+    { color: '#ffdd00', shape: [[1, 1, 1], [0, 0, 1]] },
+    { color: '#00dd66', shape: [[1, 1, 0], [0, 1, 1]] },
+    { color: '#ff4444', shape: [[0, 1, 1], [1, 1, 0]] },
+    { color: '#cc44ff', shape: [[0, 1, 0], [1, 1, 1]] },
 ];
 
-// lines cleared → garbage rows sent
 const GARBAGE_TABLE = [0, 0, 1, 2, 4];
+const PHASES = [
+    'cooldownPhase',
+    'waitingPhase',
+    'readyPhase',
+    'countdownPhase',
+    'gamePhase',
+    'resultPhase',
+    'errorPhase',
+];
 
-// ─── Network state ────────────────────────────────────────────────────────────
-let peer        = null;
-let conn        = null;
-let isHost      = false;
-let helloSent   = false;
-
-// ─── Match state ──────────────────────────────────────────────────────────────
-let myReady  = false;
+let currentMode = 'quick';
+let currentRoomCode = '';
+let myPlayer = 0;
+let oppName = 'Opponent';
+let myReady = false;
 let oppReady = false;
-let oppName  = 'Opponent';
+let countdownStarted = false;
+let gameStarted = false;
 
-// ─── Canvases ─────────────────────────────────────────────────────────────────
-let myCanvas, myCtx, oppCanvas, oppCtx;
+let lobbyPollHandle = null;
+let readyPollHandle = null;
+let readyTimerHandle = null;
+let readyDeadline = 0;
+let syncHandle = null;
+let timerHandle = null;
+let syncInFlight = false;
+let syncFailures = 0;
+let pendingGarbageToSend = 0;
+let lastOppGarbageSeen = 0;
 
-// ─── Game state ───────────────────────────────────────────────────────────────
-let myBoard  = emptyBoard();
-let cur      = null;
-let nxt      = null;
-let pos      = { x: 3, y: 0 };
-let myScore  = 0;
+let myCanvas = null;
+let myCtx = null;
+let oppCanvas = null;
+let oppCtx = null;
+let myBoard = emptyBoard();
+let cur = null;
+let nxt = null;
+let pos = { x: 3, y: 0 };
+let myScore = 0;
 let oppScore = 0;
-let dropMs        = 400;
-let lastDropTime  = 0;
+let dropMs = 400;
+let lastDropTime = 0;
 let lastSpeedTime = 0;
-let gameOver      = false;
-let gameEndReason = '';   // 'TIME_UP' | 'TOPPED_OUT' | 'OPP_TOPPED'
-let resultShown   = false;
-let scoreSaved    = false;
-let timerSecs     = BLITZ_SECS;
-let timerHandle   = null;
-let bcastHandle   = null;
-let garbageQueue  = [];
+let gameOver = false;
+let gameEndReason = '';
+let resultShown = false;
+let scoreSaved = false;
+let timerSecs = BLITZ_SECS;
+let garbageQueue = [];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+function byId(id) {
+    return document.getElementById(id);
+}
+
+function setText(id, value) {
+    const el = byId(id);
+    if (el) el.textContent = value;
+}
+
+function showPhase(id) {
+    PHASES.forEach(phaseId => {
+        const el = byId(phaseId);
+        if (el) el.classList.toggle('d-none', phaseId !== id);
+    });
+}
+
+function isPhaseVisible(id) {
+    const el = byId(id);
+    return Boolean(el && !el.classList.contains('d-none'));
+}
+
 function emptyBoard() {
     return Array.from({ length: ROWS }, () => Array(COLS).fill(null));
 }
 
-function clonePiece(p) {
-    return { color: p.color, shape: p.shape.map(r => [...r]) };
+function clonePiece(piece) {
+    return { color: piece.color, shape: piece.shape.map(row => [...row]) };
 }
 
 function randomPiece() {
     return clonePiece(PIECES[Math.floor(Math.random() * PIECES.length)]);
 }
 
-// ─── Phase management ─────────────────────────────────────────────────────────
-const ALL_PHASES = [
-    'lobbyPhase','waitingPhase','readyPhase',
-    'countdownPhase','gamePhase','resultPhase'
-];
+async function blitzApi(action, body = {}) {
+    const response = await fetch(API_URL + '?action=' + encodeURIComponent(action), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(body),
+    });
 
-function showPhase(id) {
-    ALL_PHASES.forEach(p => { document.getElementById(p).style.display = 'none'; });
-    document.getElementById(id).style.display = '';
+    const text = await response.text();
+    let data = null;
+    try {
+        data = text ? JSON.parse(text) : {};
+    } catch (error) {
+        throw new Error('Server returned invalid JSON. Check the PHP error log.');
+    }
+
+    if (!response.ok || data.error) {
+        throw new Error(data.error || 'Request failed.');
+    }
+
+    return data;
 }
 
-// ─── Lobby error helper ───────────────────────────────────────────────────────
-function lobbyError(msg) {
-    const el = document.getElementById('lobbyError');
-    el.textContent = msg;
-    el.style.display = '';
-    if (peer) { peer.destroy(); peer = null; }
-    conn = null;
-    helloSent = false;
-    showPhase('lobbyPhase');
+function friendlyError(error) {
+    const message = String(error && error.message ? error.message : error);
+    const lower = message.toLowerCase();
+
+    if (lower.includes('relation "blitz_rooms" does not exist')) {
+        return 'Blitz tables are missing. Run blitz_tables.sql in the Supabase SQL Editor.';
+    }
+
+    if (lower.includes('relation "blitz_leaderboard" does not exist')) {
+        return 'Blitz leaderboard table is missing. Run blitz_tables.sql in the Supabase SQL Editor.';
+    }
+
+    if (lower.includes('php postgresql pdo driver is not enabled') || lower.includes('could not find driver')) {
+        return 'PostgreSQL is not enabled in XAMPP PHP. Enable pdo_pgsql and pgsql in php.ini, then restart Apache.';
+    }
+
+    if (lower.includes('database unavailable')) {
+        return message;
+    }
+
+    return message || 'Room setup failed. Try again.';
 }
 
-// ─── Create Room (host) ───────────────────────────────────────────────────────
-function createRoom() {
-    document.getElementById('lobbyError').style.display = 'none';
-    isHost = true;
-    helloSent = false;
-    const code = makeCode();
-
-    peer = new Peer(code, {
-        config: {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' },
-            ]
-        }
-    });
-
-    peer.on('open', id => {
-        document.getElementById('roomCodeBig').textContent = id;
-        showPhase('waitingPhase');
-    });
-
-    peer.on('connection', incoming => {
-        conn = incoming;
-        wireConn();
-    });
-
-    peer.on('error', err => {
-        if (err.type === 'unavailable-id') {
-            peer.destroy();
-            createRoom();
-        } else if (err.type === 'server-error' || err.type === 'socket-error') {
-            lobbyError('Could not reach the matchmaking server. Check your internet connection.');
-        } else {
-            lobbyError('Error: ' + err.message);
-        }
-    });
+function showSetupError(error) {
+    stopAllPolls();
+    setText('matchError', friendlyError(error));
+    showPhase('errorPhase');
 }
 
-function makeCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-    return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+function resetMatchState() {
+    stopAllPolls();
+    currentRoomCode = '';
+    myPlayer = 0;
+    oppName = 'Opponent';
+    myReady = false;
+    oppReady = false;
+    countdownStarted = false;
+    gameStarted = false;
+    pendingGarbageToSend = 0;
+    lastOppGarbageSeen = 0;
+    syncFailures = 0;
+    myBoard = emptyBoard();
+    cur = null;
+    nxt = null;
+    pos = { x: 3, y: 0 };
+    myScore = 0;
+    oppScore = 0;
+    dropMs = 400;
+    gameOver = false;
+    gameEndReason = '';
+    resultShown = false;
+    scoreSaved = false;
+    timerSecs = BLITZ_SECS;
+    garbageQueue = [];
+    setText('myScoreDisplay', '0');
+    setText('oppScoreDisplay', '0');
+    setText('timerDisplay', '2:00');
+    setText('oppNameReady', 'Opponent');
+    setText('countdownOppName', 'Opponent');
+    setText('oppNameHeader', 'Opponent');
+    setText('oppNameGame', 'Opponent');
+    setText('finalOppNameLabel', 'Opponent');
+    setReadyLabels(false, false);
 }
 
-function cancelAndReset() {
-    if (peer) peer.destroy();
-    peer = null; conn = null; helloSent = false;
-    showPhase('lobbyPhase');
-}
-
-// ─── Join Room (guest) ────────────────────────────────────────────────────────
-function joinRoom() {
-    document.getElementById('lobbyError').style.display = 'none';
-    const code = document.getElementById('joinCode').value.trim().toUpperCase();
-    if (code.length < 4) { lobbyError('Enter a valid room code.'); return; }
-
-    isHost = false;
-    helloSent = false;
-
-    peer = new Peer(undefined, {
-        config: {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' },
-            ]
-        }
-    });
-
-    peer.on('open', () => {
-        conn = peer.connect(code, { reliable: true });
-        wireConn();
-    });
-
-    peer.on('error', err => {
-        const msg = err.type === 'peer-unavailable'
-            ? 'Room not found. Double-check the code.'
-            : 'Error: ' + err.message;
-        lobbyError(msg);
-    });
-}
-
-// ─── Wire connection events ───────────────────────────────────────────────────
-function wireConn() {
-    conn.on('data', onMessage);
-
-    conn.on('close', () => {
-        if (!gameOver) onDisconnect();
-    });
-
-    conn.on('error', () => {
-        if (!gameOver) onDisconnect();
-    });
-
-    // Send HELLO exactly once when the channel is open
-    const sendHello = () => {
-        if (!helloSent) {
-            helloSent = true;
-            send({ type: 'HELLO', name: MY_USERNAME });
-        }
-    };
-
-    if (conn.open) sendHello();
-    else conn.on('open', sendHello);
-}
-
-function send(obj) {
-    if (conn && conn.open) conn.send(obj);
-}
-
-function onDisconnect() {
-    gameOver = true;
+function stopAllPolls() {
+    clearInterval(lobbyPollHandle);
+    clearInterval(readyPollHandle);
+    clearInterval(readyTimerHandle);
+    clearInterval(syncHandle);
     clearInterval(timerHandle);
-    clearInterval(bcastHandle);
-    showResultScreen('OPPONENT LEFT', myScore, '—');
+    lobbyPollHandle = null;
+    readyPollHandle = null;
+    readyTimerHandle = null;
+    syncHandle = null;
+    timerHandle = null;
 }
 
-// ─── Message handler ──────────────────────────────────────────────────────────
-function onMessage(data) {
-    switch (data.type) {
+async function initBlitzPage(mode, initialCode) {
+    resetMatchState();
+    currentMode = mode || 'quick';
+    showWaitingStartup();
 
-        case 'HELLO':
-            oppName = data.name;
-            setOppName(oppName);
-            showPhase('readyPhase');
-            break;
-
-        case 'READY':
-            oppReady = true;
-            document.getElementById('oppReadyLabel').textContent = oppName + ': Ready!';
-            document.getElementById('oppReadyLabel').classList.replace('text-white-50', 'text-success');
-            checkBothReady();
-            break;
-
-        case 'START':
-            startCountdown();
-            break;
-
-        case 'BOARD':
-            oppScore = data.score;
-            document.getElementById('oppScoreDisplay').textContent = oppScore;
-            renderOppBoard(data.board);
-            if (data.dead && !gameOver) endGame('OPP_TOPPED');
-            break;
-
-        case 'GARBAGE':
-            garbageQueue.push(data.lines);
-            break;
-
-        case 'FINAL':
-            oppScore = data.score;
-            document.getElementById('oppScoreDisplay').textContent = oppScore;
-            // Only settle scores when both timers expired; top-out outcomes are fixed
-            if (gameOver && gameEndReason === 'TIME_UP') determineWinner();
-            break;
+    try {
+        let data;
+        if (currentMode === 'join') {
+            data = await blitzApi('join', { code: initialCode });
+        } else if (currentMode === 'create') {
+            data = await blitzApi('create');
+        } else {
+            data = await blitzApi('find');
+        }
+        handleSetupResponse(data);
+    } catch (error) {
+        showSetupError(error);
     }
 }
 
-function setOppName(name) {
-    ['oppNameReady','countdownOppName','oppNameHeader','oppNameGame','finalOppNameLabel']
-        .forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.textContent = name;
-        });
+function showWaitingStartup() {
+    const title = currentMode === 'quick'
+        ? 'Finding Match'
+        : (currentMode === 'join' ? 'Joining Room' : 'Creating Room');
+    setText('waitingTitle', title);
+    setText('lobbyStatusMsg', 'Connecting to Blitz matchmaking...');
+    const codeWrap = byId('waitingRoomCode');
+    if (codeWrap) codeWrap.style.display = 'none';
+    showPhase('waitingPhase');
 }
 
-// ─── Ready flow ───────────────────────────────────────────────────────────────
-function sendReady() {
+function handleSetupResponse(data) {
+    if (!data || !data.success) {
+        throw new Error('Room setup failed.');
+    }
+
+    currentRoomCode = data.code || currentRoomCode;
+    myPlayer = Number(data.player || myPlayer || 0);
+    setText('roomCodeBig', currentRoomCode);
+    setText('readyRoomCode', currentRoomCode);
+
+    if (data.opp_name || data.p2_username || data.status === 'ready' || data.status === 'playing') {
+        showReadyFromRoom(data);
+        return;
+    }
+
+    showWaitingForOpponent();
+    startLobbyPoll();
+}
+
+function showWaitingForOpponent() {
+    const codeWrap = byId('waitingRoomCode');
+    if (codeWrap) codeWrap.style.display = '';
+    setText('waitingTitle', currentMode === 'quick' ? 'Quick Match' : 'Room Created');
+    setText('waitingSubtext', currentMode === 'quick'
+        ? 'Share this code or wait for another quick-match player.'
+        : 'Share this code with your friend.');
+    setText('roomCodeBig', currentRoomCode);
+    setText('lobbyStatusMsg', 'Waiting for opponent...');
+    showPhase('waitingPhase');
+}
+
+function startLobbyPoll() {
+    clearInterval(lobbyPollHandle);
+    lobbyPollHandle = setInterval(() => {
+        pollLobby().catch(showSetupError);
+    }, 1200);
+    pollLobby().catch(showSetupError);
+}
+
+async function pollLobby() {
+    if (!currentRoomCode || countdownStarted || gameStarted) return;
+    const data = await blitzApi('poll', { code: currentRoomCode });
+    if (data.opp_name || data.p2_username || data.status === 'ready' || data.status === 'playing') {
+        showReadyFromRoom(data);
+    } else {
+        setText('lobbyStatusMsg', 'Waiting for opponent...');
+    }
+}
+
+function showReadyFromRoom(data) {
+    clearInterval(lobbyPollHandle);
+    lobbyPollHandle = null;
+
+    updateRoomSnapshot(data);
+    setText('readyRoomCode', currentRoomCode);
+    setText('oppNameReady', oppName);
+    setText('countdownOppName', oppName);
+    setText('oppNameHeader', oppName);
+    setText('oppNameGame', oppName);
+    setText('finalOppNameLabel', oppName);
+    setReadyLabels(myReady, oppReady);
+
+    showPhase('readyPhase');
+    startReadyTimer();
+    startReadyPoll();
+
+    if (data.status === 'playing' || (myReady && oppReady)) {
+        startCountdown();
+    }
+}
+
+function updateRoomSnapshot(data) {
+    if (!data) return;
+    currentRoomCode = data.code || currentRoomCode;
+    myPlayer = Number(data.my_player || data.player || myPlayer || 0);
+
+    const opponentFromRoom = myPlayer === 1 ? data.p2_username : data.p1_username;
+    oppName = data.opp_name || opponentFromRoom || oppName || 'Opponent';
+
+    const myReadyKey = myPlayer === 2 ? 'p2_ready' : 'p1_ready';
+    const oppReadyKey = myPlayer === 2 ? 'p1_ready' : 'p2_ready';
+    myReady = Boolean(Number(data[myReadyKey] || 0));
+    oppReady = Boolean(Number(data[oppReadyKey] || 0));
+}
+
+function setReadyLabels(isMeReady, isOppReady) {
+    const myLabel = byId('myReadyLabel');
+    const oppLabel = byId('oppReadyLabel');
+    const readyBtn = byId('readyBtn');
+
+    if (myLabel) {
+        myLabel.textContent = isMeReady ? 'You: Ready!' : 'You: Not ready';
+        myLabel.classList.toggle('text-success', isMeReady);
+        myLabel.classList.toggle('text-white-50', !isMeReady);
+    }
+
+    if (oppLabel) {
+        oppLabel.textContent = (oppName || 'Opponent') + (isOppReady ? ': Ready!' : ': Not ready');
+        oppLabel.classList.toggle('text-success', isOppReady);
+        oppLabel.classList.toggle('text-white-50', !isOppReady);
+    }
+
+    if (readyBtn) readyBtn.disabled = isMeReady || countdownStarted;
+}
+
+function startReadyPoll() {
+    clearInterval(readyPollHandle);
+    readyPollHandle = setInterval(() => {
+        pollReady().catch(showSetupError);
+    }, 1000);
+    pollReady().catch(showSetupError);
+}
+
+async function pollReady() {
+    if (!currentRoomCode || countdownStarted || gameStarted) return;
+    const data = await blitzApi('poll', { code: currentRoomCode });
+    updateRoomSnapshot(data);
+    setReadyLabels(myReady, oppReady);
+
+    if (data.status === 'playing' || (myReady && oppReady)) {
+        startCountdown();
+    }
+}
+
+function startReadyTimer() {
+    if (readyTimerHandle) return;
+    readyDeadline = Date.now() + 20000;
+    readyTimerHandle = setInterval(() => {
+        const remaining = Math.max(0, Math.ceil((readyDeadline - Date.now()) / 1000));
+        setText('readyTimerDisplay', remaining + 's');
+        const fill = byId('readyTimerBar');
+        if (fill) fill.style.width = Math.max(0, (remaining / 20) * 100) + '%';
+
+        if (remaining <= 0 && !countdownStarted) {
+            clearInterval(readyTimerHandle);
+            readyTimerHandle = null;
+            leaveRoomQuietly();
+            showSetupError(new Error('Ready timer expired. Start a new Blitz room and try again.'));
+        }
+    }, 250);
+}
+
+async function sendReady() {
+    if (!currentRoomCode || countdownStarted) return;
     myReady = true;
-    document.getElementById('myReadyLabel').textContent = 'You: Ready!';
-    document.getElementById('myReadyLabel').classList.replace('text-white-50', 'text-success');
-    document.getElementById('readyBtn').disabled = true;
-    send({ type: 'READY' });
-    checkBothReady();
-}
+    setReadyLabels(true, oppReady);
 
-function checkBothReady() {
-    if (myReady && oppReady && isHost) {
-        setTimeout(() => {
-            send({ type: 'START' });
+    try {
+        const data = await blitzApi('ready', { code: currentRoomCode });
+        if (data.both_ready) {
             startCountdown();
-        }, 300);
+        }
+    } catch (error) {
+        showSetupError(error);
     }
 }
 
-// ─── Countdown 3-2-1-GO ───────────────────────────────────────────────────────
 function startCountdown() {
+    if (countdownStarted) return;
+    countdownStarted = true;
+    clearInterval(readyPollHandle);
+    clearInterval(readyTimerHandle);
+    readyPollHandle = null;
+    readyTimerHandle = null;
+    setReadyLabels(true, true);
     showPhase('countdownPhase');
-    let n = 3;
-    const el = document.getElementById('countdownNum');
-    el.textContent = n;
 
-    const id = setInterval(() => {
-        n--;
-        if (n <= 0) {
-            clearInterval(id);
-            el.textContent = 'GO!';
+    let count = 3;
+    setText('countdownNum', String(count));
+    const countdownHandle = setInterval(() => {
+        count -= 1;
+        if (count <= 0) {
+            clearInterval(countdownHandle);
+            setText('countdownNum', 'GO!');
             setTimeout(startGame, 600);
         } else {
-            el.textContent = n;
+            setText('countdownNum', String(count));
         }
     }, 1000);
 }
 
-// ─── Game initialization ──────────────────────────────────────────────────────
 function startGame() {
+    if (gameStarted) return;
+    gameStarted = true;
     showPhase('gamePhase');
 
-    myCanvas = document.getElementById('myCanvas');
-    myCtx    = myCanvas.getContext('2d');
-    myCanvas.width  = COLS * MY_BS;
+    myCanvas = byId('myCanvas');
+    oppCanvas = byId('oppCanvas');
+    myCtx = myCanvas.getContext('2d');
+    oppCtx = oppCanvas.getContext('2d');
+    myCanvas.width = COLS * MY_BS;
     myCanvas.height = ROWS * MY_BS;
-
-    oppCanvas = document.getElementById('oppCanvas');
-    oppCtx    = oppCanvas.getContext('2d');
-    oppCanvas.width  = COLS * OPP_BS;
+    oppCanvas.width = COLS * OPP_BS;
     oppCanvas.height = ROWS * OPP_BS;
 
-    myBoard      = emptyBoard();
-    cur          = randomPiece();
-    nxt          = randomPiece();
-    pos          = { x: 3, y: 0 };
-    myScore      = oppScore  = 0;
-    gameOver     = resultShown = scoreSaved = false;
+    myBoard = emptyBoard();
+    cur = randomPiece();
+    nxt = randomPiece();
+    pos = { x: 3, y: 0 };
+    myScore = 0;
+    oppScore = 0;
+    gameOver = false;
+    resultShown = false;
+    scoreSaved = false;
     gameEndReason = '';
-    dropMs       = 400;
-    timerSecs    = BLITZ_SECS;
+    dropMs = 400;
+    timerSecs = BLITZ_SECS;
     garbageQueue = [];
+    pendingGarbageToSend = 0;
+    lastOppGarbageSeen = 0;
+    syncFailures = 0;
 
+    setText('myScoreDisplay', '0');
+    setText('oppScoreDisplay', '0');
     drawNextPiece();
     startTimer();
-    bcastHandle = setInterval(broadcastBoard, 250);
+    syncHandle = setInterval(syncRoom, 350);
+    syncRoom();
 
-    lastDropTime  = performance.now();
+    lastDropTime = performance.now();
     lastSpeedTime = Date.now();
     requestAnimationFrame(gameLoop);
 }
 
-// ─── Timer ────────────────────────────────────────────────────────────────────
 function startTimer() {
     updateTimerEl();
     timerHandle = setInterval(() => {
-        timerSecs--;
+        timerSecs -= 1;
         updateTimerEl();
         if (timerSecs <= 0) {
-            clearInterval(timerHandle);
             endGame('TIME_UP');
         }
     }, 1000);
 }
 
 function updateTimerEl() {
-    const m = Math.floor(timerSecs / 60);
-    const s = timerSecs % 60;
-    const el = document.getElementById('timerDisplay');
-    el.textContent = m + ':' + String(s).padStart(2, '0');
-    el.style.color      = timerSecs <= 10 ? '#ff4444' : '';
+    const minutes = Math.floor(timerSecs / 60);
+    const seconds = timerSecs % 60;
+    const el = byId('timerDisplay');
+    if (!el) return;
+    el.textContent = minutes + ':' + String(seconds).padStart(2, '0');
+    el.style.color = timerSecs <= 10 ? '#ff4444' : '';
     el.style.textShadow = timerSecs <= 10 ? '0 0 18px #ff4444' : '';
 }
 
-// ─── Board broadcast ──────────────────────────────────────────────────────────
-function broadcastBoard() {
-    send({ type: 'BOARD', board: myBoard, score: myScore, dead: false });
+async function syncRoom() {
+    if (!currentRoomCode || syncInFlight || resultShown) return;
+    syncInFlight = true;
+    const garbage = pendingGarbageToSend;
+
+    try {
+        const data = await blitzApi('sync', {
+            code: currentRoomCode,
+            board: myBoard,
+            score: myScore,
+            alive: gameOver ? 0 : 1,
+            garbage,
+        });
+
+        if (garbage > 0) {
+            pendingGarbageToSend = Math.max(0, pendingGarbageToSend - garbage);
+        }
+
+        syncFailures = 0;
+        applySyncResponse(data);
+    } catch (error) {
+        syncFailures += 1;
+        if (syncFailures >= 4 && !resultShown) {
+            showSetupError(error);
+        }
+    } finally {
+        syncInFlight = false;
+    }
 }
 
-// ─── Main loop ────────────────────────────────────────────────────────────────
-function gameLoop(ts) {
+function applySyncResponse(data) {
+    if (!data) return;
+    oppName = data.opp_name || oppName;
+    setText('oppNameHeader', oppName);
+    setText('oppNameGame', oppName);
+    setText('finalOppNameLabel', oppName);
+
+    oppScore = Number(data.opp_score || 0);
+    setText('oppScoreDisplay', String(oppScore));
+
+    if (Array.isArray(data.opp_board) && oppCtx) {
+        renderOppBoard(data.opp_board);
+    }
+
+    const oppGarbage = Number(data.opp_garbage || 0);
+    if (oppGarbage > lastOppGarbageSeen) {
+        garbageQueue.push(oppGarbage - lastOppGarbageSeen);
+        lastOppGarbageSeen = oppGarbage;
+    }
+
+    if (data.status === 'finished' && !resultShown) {
+        const title = data.winner === MY_USERNAME
+            ? 'YOU WIN!'
+            : (data.winner ? 'YOU LOST' : 'DRAW!');
+        finishLocal(title, data.winner || null);
+        return;
+    }
+
+    if (Number(data.opp_alive) === 0 && !gameOver) {
+        finishLocal('YOU WIN!', data.winner || MY_USERNAME);
+        return;
+    }
+
+    if (data.opp_disconnected && !gameOver) {
+        finishByReason('OPPONENT LEFT', 'disconnected');
+    }
+}
+
+function gameLoop(timestamp) {
     if (gameOver) return;
 
-    if (ts - lastDropTime >= dropMs) {
+    if (timestamp - lastDropTime >= dropMs) {
         dropPiece();
-        lastDropTime = ts;
+        lastDropTime = timestamp;
     }
 
     if (Date.now() - lastSpeedTime >= 5000) {
@@ -368,203 +562,373 @@ function gameLoop(ts) {
     requestAnimationFrame(gameLoop);
 }
 
-// ─── Rendering ────────────────────────────────────────────────────────────────
-function block(ctx, x, y, color, bs) {
+function block(ctx, x, y, color, size) {
     ctx.fillStyle = color;
-    ctx.fillRect(x * bs, y * bs, bs, bs);
+    ctx.fillRect(x * size, y * size, size, size);
     ctx.strokeStyle = 'rgba(255,255,255,0.22)';
     ctx.lineWidth = 1;
-    ctx.strokeRect(x * bs + 0.5, y * bs + 0.5, bs - 1, bs - 1);
+    ctx.strokeRect(x * size + 0.5, y * size + 0.5, size - 1, size - 1);
     ctx.fillStyle = 'rgba(255,255,255,0.11)';
-    ctx.fillRect(x * bs + 2, y * bs + 2, bs * 0.45, 3);
-    ctx.fillRect(x * bs + 2, y * bs + 2, 3, bs * 0.45);
+    ctx.fillRect(x * size + 2, y * size + 2, size * 0.45, 3);
+    ctx.fillRect(x * size + 2, y * size + 2, 3, size * 0.45);
 }
 
-function grid(ctx, bs) {
+function grid(ctx, size) {
     ctx.strokeStyle = 'rgba(255,255,255,0.04)';
     ctx.lineWidth = 1;
-    for (let y = 0; y < ROWS; y++)
-        for (let x = 0; x < COLS; x++)
-            ctx.strokeRect(x * bs, y * bs, bs, bs);
+    for (let y = 0; y < ROWS; y += 1) {
+        for (let x = 0; x < COLS; x += 1) {
+            ctx.strokeRect(x * size, y * size, size, size);
+        }
+    }
 }
 
 function drawMyBoard() {
+    if (!myCtx || !myCanvas) return;
     myCtx.clearRect(0, 0, myCanvas.width, myCanvas.height);
     grid(myCtx, MY_BS);
-    for (let y = 0; y < ROWS; y++)
-        for (let x = 0; x < COLS; x++)
+    for (let y = 0; y < ROWS; y += 1) {
+        for (let x = 0; x < COLS; x += 1) {
             if (myBoard[y][x]) block(myCtx, x, y, myBoard[y][x], MY_BS);
+        }
+    }
 }
 
 function drawCurrent() {
+    if (!cur || !myCtx) return;
     const { shape, color } = cur;
-    for (let y = 0; y < shape.length; y++)
-        for (let x = 0; x < shape[y].length; x++)
+    for (let y = 0; y < shape.length; y += 1) {
+        for (let x = 0; x < shape[y].length; x += 1) {
             if (shape[y][x]) block(myCtx, pos.x + x, pos.y + y, color, MY_BS);
+        }
+    }
 }
 
 function renderOppBoard(board) {
+    if (!oppCtx || !oppCanvas) return;
     oppCtx.clearRect(0, 0, oppCanvas.width, oppCanvas.height);
     grid(oppCtx, OPP_BS);
-    for (let y = 0; y < ROWS; y++)
-        for (let x = 0; x < COLS; x++)
-            if (board[y][x]) block(oppCtx, x, y, board[y][x], OPP_BS);
+    for (let y = 0; y < ROWS; y += 1) {
+        for (let x = 0; x < COLS; x += 1) {
+            if (board[y] && board[y][x]) block(oppCtx, x, y, board[y][x], OPP_BS);
+        }
+    }
 }
 
-// ─── Collision ────────────────────────────────────────────────────────────────
-function collides(ox, oy, shapeOverride) {
-    const s = shapeOverride || cur.shape;
-    for (let y = 0; y < s.length; y++)
-        for (let x = 0; x < s[y].length; x++)
-            if (s[y][x]) {
-                const nx = pos.x + x + ox;
-                const ny = pos.y + y + oy;
-                if (nx < 0 || nx >= COLS || ny >= ROWS) return true;
-                if (ny >= 0 && myBoard[ny][nx]) return true;
-            }
+function collides(offsetX, offsetY, shapeOverride) {
+    const shape = shapeOverride || (cur && cur.shape);
+    if (!shape) return false;
+
+    for (let y = 0; y < shape.length; y += 1) {
+        for (let x = 0; x < shape[y].length; x += 1) {
+            if (!shape[y][x]) continue;
+            const nextX = pos.x + x + offsetX;
+            const nextY = pos.y + y + offsetY;
+            if (nextX < 0 || nextX >= COLS || nextY >= ROWS) return true;
+            if (nextY >= 0 && myBoard[nextY][nextX]) return true;
+        }
+    }
+
     return false;
 }
 
-// ─── Piece control ────────────────────────────────────────────────────────────
-function move(dx) {
-    if (!gameOver && !collides(dx, 0)) pos.x += dx;
+function move(deltaX) {
+    if (!gameOver && gameStarted && !collides(deltaX, 0)) {
+        pos.x += deltaX;
+    }
 }
 
 function rotateTetromino() {
-    if (gameOver) return;
-    const orig = cur.shape;
-    cur.shape = orig[0].map((_, i) => orig.map(r => r[i]).reverse());
-    if (collides(0, 0)) cur.shape = orig;
+    if (gameOver || !gameStarted || !cur) return;
+    const original = cur.shape;
+    cur.shape = original[0].map((_, index) => original.map(row => row[index]).reverse());
+    if (collides(0, 0)) cur.shape = original;
 }
 
 function hardDrop() {
-    if (gameOver) return;
-    while (!collides(0, 1)) pos.y++;
+    if (gameOver || !gameStarted) return;
+    while (!collides(0, 1)) pos.y += 1;
     dropPiece();
 }
 
 function dropPiece() {
+    if (!cur) return;
     if (!collides(0, 1)) {
-        pos.y++;
+        pos.y += 1;
     } else {
         lockPiece();
     }
 }
 
 function lockPiece() {
-    // Merge into board
     const { shape, color } = cur;
-    for (let y = 0; y < shape.length; y++)
-        for (let x = 0; x < shape[y].length; x++)
-            if (shape[y][x] && pos.y + y >= 0)
+    for (let y = 0; y < shape.length; y += 1) {
+        for (let x = 0; x < shape[y].length; x += 1) {
+            if (shape[y][x] && pos.y + y >= 0) {
                 myBoard[pos.y + y][pos.x + x] = color;
+            }
+        }
+    }
 
     const lines = clearLines();
-
-    // Apply queued garbage after clearing own lines
     if (garbageQueue.length > 0) {
-        const total = garbageQueue.reduce((a, b) => a + b, 0);
+        const total = garbageQueue.reduce((sum, count) => sum + count, 0);
         garbageQueue = [];
         addGarbage(total);
     }
 
-    // Send garbage proportional to lines cleared
-    const g = GARBAGE_TABLE[Math.min(lines, 4)];
-    if (g > 0) send({ type: 'GARBAGE', lines: g });
+    const garbage = GARBAGE_TABLE[Math.min(lines, 4)];
+    if (garbage > 0) pendingGarbageToSend += garbage;
 
-    // Spawn next
     cur = nxt;
     nxt = randomPiece();
     pos = { x: 3, y: 0 };
     drawNextPiece();
 
     if (collides(0, 0)) {
-        send({ type: 'BOARD', board: myBoard, score: myScore, dead: true });
         endGame('TOPPED_OUT');
     }
 }
 
-// ─── Line clearing ────────────────────────────────────────────────────────────
 function clearLines() {
     let cleared = 0;
-    for (let y = ROWS - 1; y >= 0; y--) {
-        if (myBoard[y].every(c => c)) {
+    for (let y = ROWS - 1; y >= 0; y -= 1) {
+        if (myBoard[y].every(Boolean)) {
             myBoard.splice(y, 1);
             myBoard.unshift(Array(COLS).fill(null));
-            cleared++;
-            y++;
+            cleared += 1;
+            y += 1;
         }
     }
+
     if (cleared > 0) {
         myScore += cleared * 100;
-        document.getElementById('myScoreDisplay').textContent = myScore;
+        setText('myScoreDisplay', String(myScore));
     }
+
     return cleared;
 }
 
-// ─── Garbage ──────────────────────────────────────────────────────────────────
 function addGarbage(count) {
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < count; i += 1) {
         const hole = Math.floor(Math.random() * COLS);
         const row = Array(COLS).fill('#3c3c55');
         row[hole] = null;
         myBoard.shift();
         myBoard.push(row);
     }
-    const warn = document.getElementById('garbageAlert');
-    warn.style.display = '';
-    setTimeout(() => { warn.style.display = 'none'; }, 900);
+
+    const alert = byId('garbageAlert');
+    if (alert) {
+        alert.style.display = '';
+        setTimeout(() => { alert.style.display = 'none'; }, 900);
+    }
 }
 
-// ─── Next piece preview ───────────────────────────────────────────────────────
 function drawNextPiece() {
-    const el = document.getElementById('nextPiece');
+    const el = byId('nextPiece');
     if (!el || !nxt) return;
     el.innerHTML = '';
-    const bs = 16;
+    const size = 16;
     const { shape, color } = nxt;
     const wrap = document.createElement('div');
-    wrap.style.cssText = `position:relative;width:${shape[0].length*bs}px;height:${shape.length*bs}px`;
-    for (let y = 0; y < shape.length; y++)
-        for (let x = 0; x < shape[y].length; x++)
-            if (shape[y][x]) {
-                const b = document.createElement('div');
-                b.style.cssText = `width:${bs}px;height:${bs}px;background:${color};border:1px solid rgba(255,255,255,0.3);position:absolute;left:${x*bs}px;top:${y*bs}px`;
-                wrap.appendChild(b);
-            }
+    wrap.style.cssText = 'position:relative;width:' + (shape[0].length * size) + 'px;height:' + (shape.length * size) + 'px';
+
+    for (let y = 0; y < shape.length; y += 1) {
+        for (let x = 0; x < shape[y].length; x += 1) {
+            if (!shape[y][x]) continue;
+            const cell = document.createElement('div');
+            cell.style.cssText = 'width:' + size + 'px;height:' + size + 'px;background:' + color + ';border:1px solid rgba(255,255,255,0.3);position:absolute;left:' + (x * size) + 'px;top:' + (y * size) + 'px';
+            wrap.appendChild(cell);
+        }
+    }
+
     el.appendChild(wrap);
 }
 
-// ─── Keyboard ─────────────────────────────────────────────────────────────────
-document.addEventListener('keydown', e => {
-    if (gameOver || document.getElementById('gamePhase').style.display === 'none') return;
-    switch (e.key) {
-        case 'ArrowLeft':  move(-1); break;
-        case 'ArrowRight': move(1);  break;
-        case 'ArrowDown':  dropPiece(); lastDropTime = performance.now(); break;
-        case 'ArrowUp':    rotateTetromino(); break;
-        case ' ':          hardDrop(); e.preventDefault(); break;
+function endGame(reason) {
+    if (gameOver) return;
+    gameOver = true;
+    gameEndReason = reason;
+    clearInterval(timerHandle);
+    clearInterval(syncHandle);
+    timerHandle = null;
+    syncHandle = null;
+
+    if (!scoreSaved) {
+        scoreSaved = true;
+        saveHighScore(myScore);
+    }
+
+    if (reason === 'TOPPED_OUT') {
+        finishByReason('YOU LOST', 'topped_out');
+    } else {
+        finishByReason(null, 'time_up');
+    }
+}
+
+async function finishByReason(localTitle, apiReason) {
+    try {
+        const data = await blitzApi('end', {
+            code: currentRoomCode,
+            score: myScore,
+            reason: apiReason,
+        });
+
+        if (localTitle) {
+            showResultScreen(localTitle, myScore, oppScore);
+            return;
+        }
+
+        const winner = data.winner || null;
+        const title = winner === MY_USERNAME
+            ? 'YOU WIN!'
+            : (winner ? 'YOU LOST' : scoreTitle());
+        showResultScreen(title, myScore, oppScore);
+    } catch (error) {
+        showResultScreen(localTitle || scoreTitle(), myScore, oppScore);
+    }
+}
+
+function finishLocal(title) {
+    if (resultShown) return;
+    gameOver = true;
+    clearInterval(timerHandle);
+    clearInterval(syncHandle);
+    timerHandle = null;
+    syncHandle = null;
+    saveHighScore(myScore);
+    showResultScreen(title || scoreTitle(), myScore, oppScore);
+}
+
+function scoreTitle() {
+    if (myScore > oppScore) return 'YOU WIN!';
+    if (oppScore > myScore) return 'YOU LOST';
+    return 'DRAW!';
+}
+
+function showResultScreen(title, me, opp) {
+    if (resultShown) return;
+    resultShown = true;
+
+    const resultTitle = byId('resultTitle');
+    if (resultTitle) {
+        resultTitle.textContent = title;
+        resultTitle.style.color =
+            title === 'YOU WIN!' ? '#00ff88' :
+            title === 'DRAW!' ? '#ffcc00' : '#ff4444';
+    }
+
+    setText('finalMyScore', String(me));
+    setText('finalOppScore', String(opp));
+    setText('finalOppNameLabel', oppName);
+    showPhase('resultPhase');
+}
+
+function saveHighScore(score) {
+    if (score <= 0) return;
+    fetch('../dashboard/dashboard.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ score }),
+    }).catch(() => {});
+}
+
+function cancelAndReset() {
+    stopAllPolls();
+    leaveRoomQuietly();
+    window.location.href = 'multiplayer.php';
+}
+
+function leaveRoomQuietly() {
+    if (!currentRoomCode) return;
+    blitzApi('leave', { code: currentRoomCode }).catch(() => {});
+}
+
+function copyRoomCode() {
+    if (!currentRoomCode) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(currentRoomCode).catch(() => {});
+    }
+}
+
+async function startRematch() {
+    const button = byId('rematchBtn');
+    const status = byId('rematchStatus');
+    if (button) button.disabled = true;
+    if (status) {
+        status.textContent = 'Creating rematch...';
+        status.style.display = '';
+    }
+
+    try {
+        const data = await blitzApi('rematch', { code: currentRoomCode });
+        const code = data.rematch_code;
+        if (!code) throw new Error('Could not create rematch room.');
+        if (data.is_host) {
+            resetMatchState();
+            currentMode = 'create';
+            currentRoomCode = code;
+            myPlayer = 1;
+            setText('roomCodeBig', currentRoomCode);
+            setText('readyRoomCode', currentRoomCode);
+            showWaitingForOpponent();
+            startLobbyPoll();
+            return;
+        }
+        window.location.href = 'blitz_room.php?mode=join&code=' + encodeURIComponent(code);
+    } catch (error) {
+        if (status) status.textContent = friendlyError(error);
+        if (button) button.disabled = false;
+    }
+}
+
+document.addEventListener('keydown', event => {
+    if (!gameStarted || gameOver || !isPhaseVisible('gamePhase')) return;
+
+    switch (event.key) {
+        case 'ArrowLeft':
+            move(-1);
+            break;
+        case 'ArrowRight':
+            move(1);
+            break;
+        case 'ArrowDown':
+            dropPiece();
+            lastDropTime = performance.now();
+            break;
+        case 'ArrowUp':
+            rotateTetromino();
+            break;
+        case ' ':
+            hardDrop();
+            event.preventDefault();
+            break;
+        default:
+            break;
     }
 });
 
-// ─── Touch / swipe ────────────────────────────────────────────────────────────
-let touchX = 0, touchY = 0;
+let touchX = 0;
+let touchY = 0;
 
-document.addEventListener('touchstart', e => {
-    if (document.getElementById('gamePhase').style.display === 'none') return;
-    if (e.target.closest('.blitz-touch-btn')) return;
-    touchX = e.touches[0].clientX;
-    touchY = e.touches[0].clientY;
+document.addEventListener('touchstart', event => {
+    if (!gameStarted || !isPhaseVisible('gamePhase')) return;
+    if (event.target.closest('.blitz-touch-btn')) return;
+    touchX = event.touches[0].clientX;
+    touchY = event.touches[0].clientY;
 }, { passive: true });
 
-document.addEventListener('touchend', e => {
-    if (gameOver || document.getElementById('gamePhase').style.display === 'none') return;
-    if (e.target.closest('.blitz-touch-btn')) return;
-    const dx = e.changedTouches[0].clientX - touchX;
-    const dy = e.changedTouches[0].clientY - touchY;
-    const dist = Math.hypot(dx, dy);
+document.addEventListener('touchend', event => {
+    if (!gameStarted || gameOver || !isPhaseVisible('gamePhase')) return;
+    if (event.target.closest('.blitz-touch-btn')) return;
 
-    if (dist < 18) {
+    const dx = event.changedTouches[0].clientX - touchX;
+    const dy = event.changedTouches[0].clientY - touchY;
+    const distance = Math.hypot(dx, dy);
+
+    if (distance < 18) {
         rotateTetromino();
     } else if (Math.abs(dx) > Math.abs(dy)) {
         move(dx > 0 ? 1 : -1);
@@ -575,60 +939,9 @@ document.addEventListener('touchend', e => {
     }
 }, { passive: true });
 
-// ─── End game ─────────────────────────────────────────────────────────────────
-function endGame(reason) {
-    if (gameOver) return;
-    gameOver = true;
-    gameEndReason = reason;
-    clearInterval(timerHandle);
-    clearInterval(bcastHandle);
-
-    if (!scoreSaved) {
-        scoreSaved = true;
-        send({ type: 'FINAL', score: myScore });
-        saveHighScore(myScore);
-    }
-
-    if (reason === 'TOPPED_OUT') {
-        setTimeout(() => showResultScreen('YOU LOST', myScore, oppScore), 900);
-    } else if (reason === 'OPP_TOPPED') {
-        setTimeout(() => showResultScreen('YOU WIN!', myScore, oppScore), 900);
-    } else {
-        // TIME_UP — wait briefly for opponent's FINAL before comparing
-        setTimeout(determineWinner, 1800);
-    }
-}
-
-function determineWinner() {
-    if (resultShown) return;
-    if (myScore > oppScore)      showResultScreen('YOU WIN!', myScore, oppScore);
-    else if (oppScore > myScore) showResultScreen('YOU LOST', myScore, oppScore);
-    else                         showResultScreen('DRAW!',    myScore, oppScore);
-}
-
-function showResultScreen(title, me, opp) {
-    if (resultShown) return;
-    resultShown = true;
-
-    const el = document.getElementById('resultTitle');
-    el.textContent = title;
-    el.style.color =
-        title === 'YOU WIN!' ? '#00ff88' :
-        title === 'DRAW!'    ? '#ffcc00' : '#ff4444';
-
-    document.getElementById('finalMyScore').textContent  = me;
-    document.getElementById('finalOppScore').textContent = opp;
-    setOppName(oppName);
-    showPhase('resultPhase');
-}
-
-// ─── Save score via existing endpoint ────────────────────────────────────────
-function saveHighScore(score) {
-    if (score <= 0) return;
-    fetch('../dashboard/dashboard.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ score })
-    }).catch(() => {});
-}
-x
+window.addEventListener('beforeunload', () => {
+    if (!currentRoomCode || resultShown) return;
+    const payload = JSON.stringify({ code: currentRoomCode });
+    const blob = new Blob([payload], { type: 'application/json' });
+    navigator.sendBeacon(API_URL + '?action=leave', blob);
+});

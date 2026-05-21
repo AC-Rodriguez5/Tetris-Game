@@ -1,5 +1,5 @@
-<div id="countdownPhase" style="display:none"
-     class="container min-vh-100 d-flex flex-column justify-content-center align-items-center blitz-stage">
+<div id="countdownPhase"
+     class="container min-vh-100 d-flex d-none flex-column justify-content-center align-items-center blitz-stage">
     <div class="text-center blitz-countdown-wrap">
         <p class="text-info mb-3 fs-5 blitz-versus-caption">
             vs <span id="countdownOppName" class="text-white fw-bold"></span>

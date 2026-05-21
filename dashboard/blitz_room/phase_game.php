@@ -1,5 +1,5 @@
-<div id="gamePhase" style="display:none"
-     class="container-fluid min-vh-100 d-flex flex-column justify-content-center align-items-center blitz-game-stage">
+<div id="gamePhase"
+     class="container-fluid min-vh-100 d-flex d-none flex-column justify-content-center align-items-center blitz-game-stage">
 
     <div class="blitz-match-hud">
         <div class="blitz-score-card">

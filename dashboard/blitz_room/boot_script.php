@@ -19,9 +19,9 @@
             const matchError = document.getElementById('matchError');
             const waitingPhase = document.getElementById('waitingPhase');
 
-            if (waitingPhase) waitingPhase.style.display = 'none';
+            if (waitingPhase) waitingPhase.classList.add('d-none');
             if (matchError) matchError.textContent = 'Blitz failed to load. Refresh the page and try again.';
-            if (errorPhase) errorPhase.style.display = '';
+            if (errorPhase) errorPhase.classList.remove('d-none');
             return;
         }
 

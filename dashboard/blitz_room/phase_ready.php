@@ -1,5 +1,5 @@
-<div id="readyPhase" style="display:none"
-     class="container min-vh-100 d-flex flex-column justify-content-center align-items-center py-4 blitz-stage">
+<div id="readyPhase"
+     class="container min-vh-100 d-flex d-none flex-column justify-content-center align-items-center py-4 blitz-stage">
     <div class="glass-card blitz-arena-card text-center">
         <div class="blitz-kicker mb-2">Versus locked</div>
         <h2 class="cosmic-title text-white mb-4">Opponent Found</h2>

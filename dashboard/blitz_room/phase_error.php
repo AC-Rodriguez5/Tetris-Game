@@ -1,5 +1,5 @@
-<div id="errorPhase" style="display:none"
-     class="container min-vh-100 d-flex flex-column justify-content-center align-items-center py-4 blitz-stage">
+<div id="errorPhase"
+     class="container min-vh-100 d-flex d-none flex-column justify-content-center align-items-center py-4 blitz-stage">
     <div class="glass-card blitz-arena-card text-center">
         <div class="blitz-kicker mb-2">Connection interrupted</div>
         <h2 class="cosmic-title text-white mb-3">Room Setup Failed</h2>

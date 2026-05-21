@@ -1,5 +1,5 @@
-<div id="resultPhase" style="display:none"
-     class="container min-vh-100 d-flex flex-column justify-content-center align-items-center py-4 blitz-stage">
+<div id="resultPhase"
+     class="container min-vh-100 d-flex d-none flex-column justify-content-center align-items-center py-4 blitz-stage">
     <div class="glass-card blitz-arena-card text-center">
         <div class="blitz-kicker mb-2">Match complete</div>
         <h1 id="resultTitle" class="blitz-result-title mb-4"></h1>

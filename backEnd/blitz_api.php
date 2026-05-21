@@ -375,10 +375,8 @@ function endGame($db, $username, $body) {
         $winner = $room['winner'];
     } elseif ($reason === 'disconnected') {
         $winner = $username;
-    } elseif ($reason === 'topped_out'
-        && !((int)$room['p1_alive'] === 0 && (int)$room['p2_alive'] === 0)) {
-        jsonOut(['success' => true, 'winner' => null, 'status' => $room['status']]);
-        return;
+    } elseif ($reason === 'topped_out') {
+        $winner = $opp ?: null;
     } else {
         $winner = scoreWinnerFromRoom($room);
     }
