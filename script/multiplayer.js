@@ -68,7 +68,7 @@ let nxt = null;
 let pos = { x: 3, y: 0 };
 let myScore = 0;
 let oppScore = 0;
-let dropMs = 400;
+let dropMs = 600;     // ms between automatic drops; lower = faster
 let lastDropTime = 0;
 let lastSpeedTime = 0;
 let gameOver = false;
@@ -77,6 +77,10 @@ let resultShown = false;
 let scoreSaved = false;
 let timerSecs = BLITZ_SECS;
 let garbageQueue = [];
+// Most recent opponent board snapshot. Updated at sync rate (~100ms) but
+// rendered every animation frame so the rival canvas paints smoothly
+// instead of stepping at 10Hz.
+let oppBoardCache = null;
 
 function byId(id) {
     return document.getElementById(id);
@@ -112,12 +116,29 @@ function randomPiece() {
 }
 
 async function blitzApi(action, body = {}) {
-    const response = await fetch(API_URL + '?action=' + encodeURIComponent(action), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify(body),
-    });
+    // Bound the request so a hung fetch can't keep syncInFlight=true forever
+    // and stall the entire polling loop. 4s is generous vs the ~300ms RTT
+    // budget but short enough that a real stall recovers within one tick.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+    let response;
+    try {
+        response = await fetch(API_URL + '?action=' + encodeURIComponent(action), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify(body),
+            signal: controller.signal,
+        });
+    } catch (error) {
+        if (error && error.name === 'AbortError') {
+            throw new Error('Request timed out. Check your connection.');
+        }
+        throw error;
+    } finally {
+        clearTimeout(timeoutId);
+    }
 
     const text = await response.text();
     let data = null;
@@ -181,13 +202,14 @@ function resetMatchState() {
     pos = { x: 3, y: 0 };
     myScore = 0;
     oppScore = 0;
-    dropMs = 400;
+    dropMs = 600;
     gameOver = false;
     gameEndReason = '';
     resultShown = false;
     scoreSaved = false;
     timerSecs = BLITZ_SECS;
     garbageQueue = [];
+    oppBoardCache = null;
     rematchRole = null;
     pendingRematchCode = null;
     rematchHandled = false;
@@ -361,7 +383,7 @@ function startReadyPoll() {
     clearInterval(readyPollHandle);
     readyPollHandle = setInterval(() => {
         pollReady().catch(showSetupError);
-    }, 1000);
+    }, 400);
     pollReady().catch(showSetupError);
 }
 
@@ -457,9 +479,10 @@ function startGame() {
     resultShown = false;
     scoreSaved = false;
     gameEndReason = '';
-    dropMs = 400;
+    dropMs = 600;
     timerSecs = BLITZ_SECS;
     garbageQueue = [];
+    oppBoardCache = null;
     pendingGarbageToSend = 0;
     lastOppGarbageSeen = 0;
     syncFailures = 0;
@@ -468,7 +491,7 @@ function startGame() {
     setText('oppScoreDisplay', '0');
     drawNextPiece();
     startTimer();
-    syncHandle = setInterval(syncRoom, 200);
+    syncHandle = setInterval(syncRoom, 100);
     syncRoom();
 
     lastDropTime = performance.now();
@@ -480,9 +503,14 @@ function startTimer() {
     updateTimerEl();
     timerHandle = setInterval(() => {
         timerSecs -= 1;
+        if (timerSecs < 0) timerSecs = 0;
         updateTimerEl();
         if (timerSecs <= 0) {
-            endGame('TIME_UP');
+            // Self-clear so the interval doesn't tick into negatives if
+            // gameOver is already true (spectator after a TOPPED_OUT).
+            clearInterval(timerHandle);
+            timerHandle = null;
+            if (!gameOver) endGame('TIME_UP');
         }
     }, 1000);
 }
@@ -557,8 +585,13 @@ function applySyncResponse(data) {
     oppScore = Number(data.opp_score || 0);
     setText('oppScoreDisplay', String(oppScore));
 
-    if (Array.isArray(data.opp_board) && oppCtx) {
-        renderOppBoard(data.opp_board);
+    if (Array.isArray(data.opp_board)) {
+        // Stash for the gameLoop to paint on the next animation frame so
+        // the rival canvas refreshes at rAF rate, not the sync interval.
+        oppBoardCache = data.opp_board;
+        // Spectator (after topout): gameLoop has stopped scheduling frames,
+        // so paint directly here to keep the rival board ticking.
+        if (gameOver && oppCtx) renderOppBoard(oppBoardCache);
     }
 
     const oppGarbage = Number(data.opp_garbage || 0);
@@ -603,13 +636,15 @@ function gameLoop(timestamp) {
         lastDropTime = timestamp;
     }
 
-    if (Date.now() - lastSpeedTime >= 5000) {
-        dropMs = Math.max(80, dropMs - 20);
+    if (Date.now() - lastSpeedTime >= 30000) {
+        dropMs = Math.max(200, dropMs - 20);
         lastSpeedTime = Date.now();
     }
 
     drawMyBoard();
+    drawGhost();
     drawCurrent();
+    if (oppBoardCache) renderOppBoard(oppBoardCache);
     requestAnimationFrame(gameLoop);
 }
 
@@ -653,6 +688,41 @@ function drawCurrent() {
             if (shape[y][x]) block(myCtx, pos.x + x, pos.y + y, color, MY_BS);
         }
     }
+}
+
+// Project the active piece down to its landing row and render a translucent
+// outline there so the player can see exactly where it will lock.
+function drawGhost() {
+    if (!cur || !myCtx || gameOver) return;
+    let dy = 0;
+    while (!collides(0, dy + 1)) dy += 1;
+    if (dy === 0) return; // piece already resting — ghost would overlap
+
+    const { shape, color } = cur;
+    myCtx.save();
+    myCtx.globalAlpha = 0.22;
+    myCtx.fillStyle = color;
+    for (let y = 0; y < shape.length; y += 1) {
+        for (let x = 0; x < shape[y].length; x += 1) {
+            if (!shape[y][x]) continue;
+            const py = pos.y + dy + y;
+            if (py < 0) continue;
+            myCtx.fillRect((pos.x + x) * MY_BS, py * MY_BS, MY_BS, MY_BS);
+        }
+    }
+    myCtx.restore();
+
+    myCtx.strokeStyle = color;
+    myCtx.lineWidth = 1.5;
+    for (let y = 0; y < shape.length; y += 1) {
+        for (let x = 0; x < shape[y].length; x += 1) {
+            if (!shape[y][x]) continue;
+            const py = pos.y + dy + y;
+            if (py < 0) continue;
+            myCtx.strokeRect((pos.x + x) * MY_BS + 1, py * MY_BS + 1, MY_BS - 2, MY_BS - 2);
+        }
+    }
+    myCtx.lineWidth = 1;
 }
 
 function renderOppBoard(board) {
@@ -739,6 +809,11 @@ function lockPiece() {
     if (collides(0, 0)) {
         endGame('TOPPED_OUT');
     }
+
+    // Locking a piece is the biggest change the opponent sees — push it
+    // immediately instead of waiting up to 100ms for the next sync tick.
+    // syncInFlight already guards against overlapping requests.
+    syncRoom();
 }
 
 function clearLines() {
@@ -801,8 +876,14 @@ function endGame(reason) {
     if (gameOver) return;
     gameOver = true;
     gameEndReason = reason;
-    clearInterval(timerHandle);
-    timerHandle = null;
+    // For TOPPED_OUT, the match keeps going for the surviving opponent —
+    // keep the countdown visible so the spectator knows how long is left.
+    // For other reasons (TIME_UP / disconnect) the timer is no longer
+    // meaningful, so stop it now.
+    if (reason !== 'TOPPED_OUT') {
+        clearInterval(timerHandle);
+        timerHandle = null;
+    }
     // Important: keep syncHandle running. The room may still be playing
     // (single-side topped_out) so we need to learn when the other player
     // finishes via the next sync that flips status to 'finished'.
@@ -853,6 +934,10 @@ async function reportEnd(apiReason) {
 function stopSyncForResult() {
     clearInterval(syncHandle);
     syncHandle = null;
+    // Result screen is taking over — the spectator countdown (kept alive
+    // through TOPPED_OUT) is no longer needed.
+    clearInterval(timerHandle);
+    timerHandle = null;
 }
 
 function showMyToppedSpectator() {
@@ -895,7 +980,12 @@ function finishLocal(title, winner) {
     clearInterval(timerHandle);
     timerHandle = null;
     stopSyncForResult();
-    saveHighScore(myScore);
+    // endGame() may have already saved the score before the sync poller
+    // delivered status='finished'. Guard against a duplicate POST.
+    if (!scoreSaved) {
+        scoreSaved = true;
+        saveHighScore(myScore);
+    }
     const resolved = title || (winner
         ? (winner === MY_USERNAME ? 'YOU WIN!' : 'YOU LOST')
         : scoreTitle());
@@ -953,7 +1043,7 @@ function refreshRematchLimitUI() {
 
 function startResultPoll() {
     clearInterval(resultPollHandle);
-    resultPollHandle = setInterval(pollResultRoom, 1000);
+    resultPollHandle = setInterval(pollResultRoom, 400);
     pollResultRoom();
 }
 
@@ -1063,6 +1153,17 @@ async function requestRematch() {
     try {
         const data = await blitzApi('rematch_request', { code: currentRoomCode });
         pendingRematchCode = data.rematch_code;
+
+        // If the opponent had already clicked Rematch, the server routes
+        // this request through rematch_accept and returns is_host=false —
+        // we're already joined to the new room as p2, so jump straight in
+        // instead of sitting on the "Waiting" screen.
+        if (data && data.is_host === false && data.rematch_code) {
+            rematchHandled = true;
+            stopAllPolls();
+            window.location.href = 'blitz_room.php?mode=join&code=' + encodeURIComponent(data.rematch_code);
+            return;
+        }
         // Result poll will pick up acceptance/decline/expiry from now on.
     } catch (error) {
         rematchRole = null;

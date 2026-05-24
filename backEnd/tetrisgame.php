@@ -138,6 +138,12 @@ class tetrisgame {
             return null; // User not found
         }
 
+        // Players who have never saved a score have score = NULL. Comparing
+        // `score > NULL` in SQL yields unknown, so the count would be 0 and
+        // the user would be reported as rank 1. Normalize NULL to 0 so a
+        // user with no score is correctly ranked below anyone with a score.
+        $userScore = $userScore ?? 0;
+
         // Get the user's ranking based on their score
         // Count how many users have a higher score than the current user and add 1 to get the rank
         $stmt = $this->db->prepare('SELECT COUNT(*) + 1 AS rank FROM "TetrisGame" WHERE score > ?');

@@ -16,7 +16,9 @@ class dbcon{
         }
 
         try{
-            $dsn = "pgsql:host={$this->host};port={$this->port};dbname={$this->dbname}";
+            // connect_timeout=5 keeps a paused / unreachable Supabase from
+            // hanging requests for the default ~60s before reporting failure.
+            $dsn = "pgsql:host={$this->host};port={$this->port};dbname={$this->dbname};connect_timeout=5";
             $this->con = new PDO($dsn, $this->user, $this->password, [
                 PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_EMULATE_PREPARES   => true,
@@ -46,6 +48,18 @@ class dbcon{
             if (strpos($normalized, $needle) !== false) {
                 return 'Could not reach Supabase. Check the internet connection, firewall, host, and port in dbConnect\\dbconnect.php.';
             }
+        }
+
+        // TCP succeeds but the Postgres handshake never completes — the
+        // pooler is up but the database backend is not answering. By far
+        // the most common cause is a Supabase project that was auto-paused
+        // for inactivity on the free tier.
+        if (strpos($normalized, 'timeout expired') !== false) {
+            return 'Database did not respond. The Supabase project is likely paused — open https://supabase.com/dashboard and click "Restore project", then try again.';
+        }
+
+        if (strpos($normalized, 'unknown host') !== false || strpos($normalized, 'could not translate host name') !== false) {
+            return 'DNS could not resolve the Supabase host. Check the internet connection, and verify the host name in dbConnect\\dbconnect.php.';
         }
 
         return 'Unable to connect to the PostgreSQL database. Check dbConnect\\dbconnect.php and C:\\xampp\\apache\\logs\\error.log for details.';

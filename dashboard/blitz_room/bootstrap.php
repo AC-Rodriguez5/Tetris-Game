@@ -11,7 +11,10 @@ if (!in_array($mode, ['quick', 'create', 'join'], true)) {
     $mode = 'quick';
 }
 
-$initialCode = strtoupper(preg_replace('/[^A-Z]/', '', $_GET['code'] ?? ''));
+// Uppercase BEFORE stripping non-letters so lowercase URLs (?code=abcdef)
+// are accepted — otherwise the [^A-Z] regex would remove the lowercase
+// characters first and the user would be bounced to blitz_join.php.
+$initialCode = preg_replace('/[^A-Z]/', '', strtoupper($_GET['code'] ?? ''));
 if ($mode === 'join' && strlen($initialCode) !== 6) {
     header("Location: blitz_join.php");
     exit();

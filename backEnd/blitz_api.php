@@ -73,6 +73,14 @@ try {
     }
 
     $username = $_SESSION['username'];
+
+    // Release the session file lock immediately. PHP's default file-based
+    // session handler holds an exclusive flock for the duration of the
+    // request, which serializes all in-flight blitz_api calls from the
+    // same user (browser cookies → same SID → same file). At 10 syncs/sec
+    // this is the throughput ceiling. Nothing below mutates $_SESSION.
+    session_write_close();
+
     $action = $_GET['action'] ?? '';
     $raw    = file_get_contents('php://input');
     $body   = $raw ? (json_decode($raw, true) ?? []) : [];

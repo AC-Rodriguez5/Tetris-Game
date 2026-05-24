@@ -170,7 +170,7 @@ function drawBoard() {
 }
 
 function drawTetromino() {
-// Draw the current active tetromino on the canvas based on its shape and color, using the current 
+// Draw the current active tetromino on the canvas based on its shape and color, using the current
 // position to determine where it should be rendered.
     const shape = currentTetromino.shape;
     const color = currentTetromino.color;
@@ -181,6 +181,42 @@ function drawTetromino() {
             }
         }
     }
+}
+
+// Translucent landing-zone outline so the player can see where the active
+// tetromino will lock if it falls straight down.
+function drawGhost() {
+    if (!currentTetromino || gameOver) return;
+    let dy = 0;
+    while (!hasCollision(0, dy + 1)) dy += 1;
+    if (dy === 0) return;
+
+    const shape = currentTetromino.shape;
+    const color = currentTetromino.color;
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = color;
+    for (let y = 0; y < shape.length; y++) {
+        for (let x = 0; x < shape[y].length; x++) {
+            if (!shape[y][x]) continue;
+            const py = currentPosition.y + dy + y;
+            if (py < 0) continue;
+            ctx.fillRect((currentPosition.x + x) * BLOCK_SIZE, py * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+        }
+    }
+    ctx.restore();
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    for (let y = 0; y < shape.length; y++) {
+        for (let x = 0; x < shape[y].length; x++) {
+            if (!shape[y][x]) continue;
+            const py = currentPosition.y + dy + y;
+            if (py < 0) continue;
+            ctx.strokeRect((currentPosition.x + x) * BLOCK_SIZE + 1, py * BLOCK_SIZE + 1, BLOCK_SIZE - 2, BLOCK_SIZE - 2);
+        }
+    }
+    ctx.lineWidth = 1;
 }
 
 
@@ -313,6 +349,7 @@ function gameLoop(currentTime = performance.now()) {
     }
     
     drawBoard();
+    drawGhost();
     drawTetromino();
     incrementSpeed();
     // Use requestAnimationFrame for 60fps smooth animation
