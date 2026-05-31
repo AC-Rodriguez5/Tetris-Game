@@ -2,8 +2,22 @@
 require_once __DIR__ . '/../backEnd/session_bootstrap.php';
 include '../backEnd/tetrisgame.php';
 
+// Already logged in → no need to register again, go to the dashboard
+if (isset($_SESSION['is_logged_in']) && $_SESSION['is_logged_in'] === true) {
+    header("Location: dashboard.php");
+    exit();
+}
+
 if (isset($_POST['register'])) {
-    if (empty($_POST['email']) || empty($_POST['username']) || empty($_POST['password']) || empty($_POST['repassword'])) {
+    $clientToken  = $_POST['csrf_token'] ?? '';
+    $sessionToken = $_SESSION['csrf_token'] ?? '';
+    if (!is_string($clientToken) || $sessionToken === '' || !hash_equals($sessionToken, $clientToken)) {
+        $_SESSION['msg'] = "Security token expired. Please try again.";
+        $_SESSION['old_register'] = [
+            'username' => $_POST['username'] ?? '',
+            'email' => $_POST['email'] ?? '',
+        ];
+    } elseif (empty($_POST['email']) || empty($_POST['username']) || empty($_POST['password']) || empty($_POST['repassword'])) {
         $_SESSION['msg'] = "All fields are required.";
         $_SESSION['old_register'] = [
             'username' => $_POST['username'] ?? '',
@@ -45,6 +59,7 @@ unset($_SESSION['old_register']);
         </div>
 
         <form method="POST" id="register-form" novalidate>
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'] ?? '', ENT_QUOTES); ?>">
             <div class="mb-3">
                 <label class="cosmic-label" for="register-username">Commander Name</label>
                 <input type="text" id="register-username" name="username" class="form-control glass-input w-100"

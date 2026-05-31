@@ -2,8 +2,19 @@
 require_once __DIR__ . '/../backEnd/session_bootstrap.php';
 include '../backEnd/tetrisgame.php';
 
+// Already logged in → skip the login form and go straight to the dashboard
+if (isset($_SESSION['is_logged_in']) && $_SESSION['is_logged_in'] === true) {
+    header("Location: dashboard.php");
+    exit();
+}
+
 if (isset($_POST['login'])) {
-    if (empty($_POST['email']) || empty($_POST['password'])) {
+    $clientToken  = $_POST['csrf_token'] ?? '';
+    $sessionToken = $_SESSION['csrf_token'] ?? '';
+    if (!is_string($clientToken) || $sessionToken === '' || !hash_equals($sessionToken, $clientToken)) {
+        $_SESSION['msg'] = "Security token expired. Please try again.";
+        $_SESSION['old_login_email'] = $_POST['email'] ?? '';
+    } elseif (empty($_POST['email']) || empty($_POST['password'])) {
         $_SESSION['msg'] = "All fields are required.";
         $_SESSION['old_login_email'] = $_POST['email'] ?? '';
     } else {
@@ -39,6 +50,7 @@ unset($_SESSION['old_login_email']);
         </div>
 
         <form method="POST">
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token'] ?? '', ENT_QUOTES); ?>">
             <div class="mb-3">
                 <label class="cosmic-label" for="login-email">Email Address</label>
                 <input type="email" id="login-email" name="email" class="form-control glass-input w-100"

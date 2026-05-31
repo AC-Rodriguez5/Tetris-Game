@@ -74,7 +74,8 @@
       "Bash(curl -s \"https://api.github.com/repos/AC-Rodriguez5/Tetris-Game/commits/main\")",
       "mcp__ide__getDiagnostics",
       "Bash(echo \"node exit: $?\")",
-      "PowerShell(Test-NetConnection *)"
+      "PowerShell(Test-NetConnection *)",
+      "Bash(Select-Object FullName)"
     ]
   }
 }

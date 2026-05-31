@@ -97,6 +97,19 @@ class tetrisgame {
         if($user) {
             // Verify the password
             if(password_verify($password, $user['password'])) {
+                // Deny access for blocked accounts
+                if (!empty($user['is_blocked'])) {
+                    $_SESSION['old_login_email'] = $email;
+                    $_SESSION['msg'] = "Your account has been suspended. Contact an administrator.";
+                    header("Location: ../dashboard/login.php");
+                    exit();
+                }
+                // Record last login time (column added by admin_setup.sql)
+                try {
+                    $upd = $this->db->prepare('UPDATE "TetrisGame" SET last_login = NOW() WHERE id = ?');
+                    $upd->execute([$user['id']]);
+                } catch (Exception $e) { /* column may not exist yet — silently skip */ }
+
                 session_regenerate_id(true);
                 unset($_SESSION['old_login_email']);
                 $_SESSION['user_id'] = $user['id'];
