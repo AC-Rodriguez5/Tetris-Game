@@ -78,7 +78,17 @@
       "Bash(Select-Object FullName)",
       "Bash(pip install *)",
       "Read(//c/xampp/**)",
-      "PowerShell(Out-Null *)"
+      "PowerShell(Out-Null *)",
+      "Bash(where soffice *)",
+      "Bash(where libreoffice *)",
+      "Bash(exist \"C:\\\\Program Files\\\\LibreOffice\\\\program\\\\soffice.exe\" echo FOUND_LO)",
+      "Bash(exist \"C:\\\\Program Files \\(x86\\)\\\\LibreOffice\\\\program\\\\soffice.exe\" echo FOUND_LO86)",
+      "PowerShell(Test-Path *)",
+      "PowerShell(Out-File *)",
+      "PowerShell(Get-Command *)",
+      "PowerShell(python -m pip install --quiet pymupdf 2>&1 | Select-Object -Last 5; python -c \"import fitz; print\\(fitz.__version__\\)\")",
+      "PowerShell(python -c \"import fitz; print\\('fitz version', fitz.__version__\\)\")",
+      "PowerShell(python -m pip install pymupdf 2>&1 | Select-Object -Last 10; python -c \"import fitz; print\\(fitz.__version__\\)\")"
     ]
   },
   "enabledMcpjsonServers": [
