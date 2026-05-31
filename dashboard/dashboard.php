@@ -105,8 +105,8 @@ $highScore = $auth->getScore($_SESSION['username'] ?? '');
 
         <div class="mission-actions stagger-children">
             <a class="btn neon-btn btn-large" href="game.php">Play</a>
-            <a class="btn neon-btn neon-blitz btn-large" href="multiplayer.php">Blitz Mode</a>
             <a class="btn neon-btn btn-large" href="leaderboard.php">Leaderboard</a>
+            <a class="btn neon-btn neon-blitz btn-large" href="multiplayer.php">Blitz Mode</a>
             <a class="btn neon-btn neon-blitz btn-large" href="blitz_leaderboard.php">Blitz Rankings</a>
         </div>
 

@@ -75,12 +75,10 @@
       "mcp__ide__getDiagnostics",
       "Bash(echo \"node exit: $?\")",
       "PowerShell(Test-NetConnection *)",
-<<<<<<< HEAD
-      "Bash(Select-Object FullName)"
-=======
+      "Bash(Select-Object FullName)",
       "Bash(pip install *)",
-      "Read(//c/xampp/**)"
->>>>>>> e73c8ecb31678e064a509875f14aad7766068e38
+      "Read(//c/xampp/**)",
+      "PowerShell(Out-Null *)"
     ]
   },
   "enabledMcpjsonServers": [
