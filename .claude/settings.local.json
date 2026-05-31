@@ -75,7 +75,11 @@
       "mcp__ide__getDiagnostics",
       "Bash(echo \"node exit: $?\")",
       "PowerShell(Test-NetConnection *)",
-      "Bash(pip install *)"
+      "Bash(pip install *)",
+      "Read(//c/xampp/**)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "supabase"
+  ]
 }
