@@ -20,6 +20,7 @@ class dbcon{
             // hanging requests for the default ~60s before reporting failure.
             $dsn = "pgsql:host={$this->host};port={$this->port};dbname={$this->dbname};connect_timeout=5";
             $this->con = new PDO($dsn, $this->user, $this->password, [
+            
                 PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_EMULATE_PREPARES   => true,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
