@@ -1,7 +1,7 @@
 <?php
 // Buffer everything so stray PHP warnings/notices don't corrupt JSON output.
 ob_start();
-session_start();
+require_once __DIR__ . '/session_bootstrap.php';
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
 
@@ -73,6 +73,20 @@ try {
     }
 
     $username = $_SESSION['username'];
+    $action = $_GET['action'] ?? '';
+    $raw    = file_get_contents('php://input');
+    $body   = $raw ? (json_decode($raw, true) ?? []) : [];
+    if (!is_array($body)) {
+        $body = [];
+    }
+
+    if ($action !== 'leaderboard') {
+        $clientToken = $body['csrf_token'] ?? '';
+        $sessionToken = $_SESSION['csrf_token'] ?? '';
+        if (!is_string($clientToken) || $sessionToken === '' || !hash_equals($sessionToken, $clientToken)) {
+            fail('Invalid CSRF token.', 403);
+        }
+    }
 
     // Release the session file lock immediately. PHP's default file-based
     // session handler holds an exclusive flock for the duration of the
@@ -81,18 +95,15 @@ try {
     // this is the throughput ceiling. Nothing below mutates $_SESSION.
     session_write_close();
 
-    $action = $_GET['action'] ?? '';
-    $raw    = file_get_contents('php://input');
-    $body   = $raw ? (json_decode($raw, true) ?? []) : [];
-
     $dbcon = new dbcon();
     for ($attempt = 0; $attempt < 2; $attempt++) {
         $db = $dbcon->dbconnect();
         if (!$db) {
-            if ($attempt === 0 && isTransientDbMessage($dbcon->lastError)) {
+            if ($attempt === 0 && isTransientDbMessage($dbcon->lastDebugError ?: $dbcon->lastError)) {
                 continue;
             }
-            fail('Database unavailable: ' . ($dbcon->lastError ?: 'unknown error'));
+            error_log('[blitz_api dbconnect] ' . ($dbcon->lastDebugError ?: $dbcon->lastError));
+            fail('Database unavailable. Please try again later.', 503);
         }
 
         try {
@@ -198,6 +209,46 @@ function scoreWinnerFromRoom($room) {
 }
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
+
+function recordBlitzLeaderboardResult($db, $username, $winner, $score) {
+    if (!$username) {
+        return;
+    }
+    $win  = ($winner === $username) ? 1 : 0;
+    $loss = ($winner !== null && $winner !== $username) ? 1 : 0;
+    $db->prepare("INSERT INTO blitz_leaderboard (username, wins, losses, best_score, total_games)
+        VALUES (?, ?, ?, ?, 1)
+        ON CONFLICT (username) DO UPDATE SET
+            wins        = blitz_leaderboard.wins + EXCLUDED.wins,
+            losses      = blitz_leaderboard.losses + EXCLUDED.losses,
+            best_score  = GREATEST(blitz_leaderboard.best_score, EXCLUDED.best_score),
+            total_games = blitz_leaderboard.total_games + 1,
+            updated_at  = NOW()")
+       ->execute([$username, $win, $loss, max(0, (int)$score)]);
+}
+
+function recordFinalizedRoomResults($db, $room, $winner) {
+    if (!$room || empty($room['p2_username'])) {
+        return;
+    }
+    recordBlitzLeaderboardResult($db, $room['p1_username'], $winner, $room['p1_score'] ?? 0);
+    recordBlitzLeaderboardResult($db, $room['p2_username'], $winner, $room['p2_score'] ?? 0);
+}
+
+function finalizeRoomAndRecordResults($db, $code, $winner) {
+    $up = $db->prepare("UPDATE blitz_rooms
+                           SET status='finished', winner=?
+                         WHERE room_code=? AND status <> 'finished'");
+    $up->execute([$winner, $code]);
+
+    $room = fetchRoom($db, $code);
+    $transitioned = $up->rowCount() > 0;
+    if ($transitioned) {
+        recordFinalizedRoomResults($db, $room, $winner);
+    }
+
+    return ['room' => $room, 'transitioned' => $transitioned];
+}
 
 function createRoom($db, $username) {
     cleanStale($db);
@@ -362,9 +413,8 @@ function syncRoom($db, $username, $body) {
     if ($r && $r['status'] === 'playing'
         && (int)$r['p1_alive'] === 0 && (int)$r['p2_alive'] === 0) {
         $winner = scoreWinnerFromRoom($r);
-        $db->prepare("UPDATE blitz_rooms SET status='finished', winner=? WHERE room_code=?")
-           ->execute([$winner, $code]);
-        $r = fetchRoom($db, $code);
+        $finalized = finalizeRoomAndRecordResults($db, $code, $winner);
+        $r = $finalized['room'];
     }
 
     $oppDisconnected = false;
@@ -419,6 +469,11 @@ function endGame($db, $username, $body) {
         $shouldFinalize = false;
         $winner = $room['winner'];
     } elseif ($reason === 'disconnected') {
+        $oppUpdated = $room["p{$o}_updated"] ?? null;
+        $oppStale = $opp && $oppUpdated && (time() - strtotime($oppUpdated)) > 12;
+        if (!$oppStale) {
+            fail('Opponent is still connected.', 409);
+        }
         $shouldFinalize = true;
         $winner = $username;
     } elseif ($reason === 'topped_out') {
@@ -448,31 +503,18 @@ function endGame($db, $username, $body) {
         }
     }
 
-    if ($shouldFinalize && $room['status'] !== 'finished') {
-        $db->prepare("UPDATE blitz_rooms SET status='finished', winner=? WHERE room_code=?")
-           ->execute([$winner, $code]);
-    }
-
-    // Record to blitz leaderboard only when the room is actually finalized
-    // with a real opponent — otherwise a single topped_out would double-record.
-    if ($shouldFinalize && $opp) {
-        $win  = ($winner === $username) ? 1 : 0;
-        $loss = ($winner !== null && $winner !== $username) ? 1 : 0;
-        $db->prepare("INSERT INTO blitz_leaderboard (username, wins, losses, best_score, total_games)
-            VALUES (?, ?, ?, ?, 1)
-            ON CONFLICT (username) DO UPDATE SET
-                wins        = blitz_leaderboard.wins + EXCLUDED.wins,
-                losses      = blitz_leaderboard.losses + EXCLUDED.losses,
-                best_score  = GREATEST(blitz_leaderboard.best_score, EXCLUDED.best_score),
-                total_games = blitz_leaderboard.total_games + 1,
-                updated_at  = NOW()")
-           ->execute([$username, $win, $loss, $score]);
+    $transitioned = false;
+    if ($shouldFinalize) {
+        $finalized = finalizeRoomAndRecordResults($db, $code, $winner);
+        $room = $finalized['room'];
+        $transitioned = $finalized['transitioned'];
     }
 
     jsonOut([
         'success'    => true,
         'winner'     => $winner,
         'finalized'  => $shouldFinalize,
+        'recorded'   => $transitioned,
         'status'     => $shouldFinalize ? 'finished' : $room['status'],
         'opp_alive'  => $oppAlive,
         'me_alive'   => $meAlive,

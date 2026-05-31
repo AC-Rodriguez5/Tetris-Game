@@ -77,6 +77,8 @@ let resultShown = false;
 let scoreSaved = false;
 let timerSecs = BLITZ_SECS;
 let garbageQueue = [];
+let pieceBag = [];
+let pieceRngState = 1;
 // Most recent opponent board snapshot. Updated at sync rate (~100ms) but
 // rendered every animation frame so the rival canvas paints smoothly
 // instead of stepping at 10Hz.
@@ -111,8 +113,36 @@ function clonePiece(piece) {
     return { color: piece.color, shape: piece.shape.map(row => [...row]) };
 }
 
+function hashSeed(text) {
+    let hash = 2166136261;
+    String(text || 'BLITZ').split('').forEach(ch => {
+        hash ^= ch.charCodeAt(0);
+        hash = Math.imul(hash, 16777619);
+    });
+    return hash >>> 0 || 1;
+}
+
+function resetPieceSequence(seedSource) {
+    pieceRngState = hashSeed(seedSource);
+    pieceBag = [];
+}
+
+function seededRandom() {
+    pieceRngState = (Math.imul(pieceRngState, 1664525) + 1013904223) >>> 0;
+    return pieceRngState / 4294967296;
+}
+
+function refillPieceBag() {
+    pieceBag = PIECES.map((_, index) => index);
+    for (let i = pieceBag.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(seededRandom() * (i + 1));
+        [pieceBag[i], pieceBag[j]] = [pieceBag[j], pieceBag[i]];
+    }
+}
+
 function randomPiece() {
-    return clonePiece(PIECES[Math.floor(Math.random() * PIECES.length)]);
+    if (pieceBag.length === 0) refillPieceBag();
+    return clonePiece(PIECES[pieceBag.pop()]);
 }
 
 async function blitzApi(action, body = {}) {
@@ -122,13 +152,17 @@ async function blitzApi(action, body = {}) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 4000);
 
+    const payload = {
+        ...body,
+        csrf_token: typeof CSRF_TOKEN === 'string' ? CSRF_TOKEN : '',
+    };
     let response;
     try {
         response = await fetch(API_URL + '?action=' + encodeURIComponent(action), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
-            body: JSON.stringify(body),
+            body: JSON.stringify(payload),
             signal: controller.signal,
         });
     } catch (error) {
@@ -209,6 +243,8 @@ function resetMatchState() {
     scoreSaved = false;
     timerSecs = BLITZ_SECS;
     garbageQueue = [];
+    pieceBag = [];
+    pieceRngState = 1;
     oppBoardCache = null;
     rematchRole = null;
     pendingRematchCode = null;
@@ -470,6 +506,7 @@ function startGame() {
     oppCanvas.height = ROWS * OPP_BS;
 
     myBoard = emptyBoard();
+    resetPieceSequence(currentRoomCode);
     cur = randomPiece();
     nxt = randomPiece();
     pos = { x: 3, y: 0 };
@@ -795,7 +832,7 @@ function lockPiece() {
     if (garbageQueue.length > 0) {
         const total = garbageQueue.reduce((sum, count) => sum + count, 0);
         garbageQueue = [];
-        addGarbage(total);
+        addGarbage(total, { checkActive: false });
     }
 
     const garbage = GARBAGE_TABLE[Math.min(lines, 4)];
@@ -835,7 +872,22 @@ function clearLines() {
     return cleared;
 }
 
-function addGarbage(count) {
+function resolveGarbageCollision() {
+    if (!cur || gameOver || !gameStarted) return;
+
+    let nudges = 0;
+    while (collides(0, 0) && nudges < ROWS) {
+        pos.y -= 1;
+        nudges += 1;
+    }
+
+    if (collides(0, 0)) {
+        endGame('TOPPED_OUT');
+    }
+}
+
+function addGarbage(count, options = {}) {
+    const checkActive = options.checkActive !== false;
     for (let i = 0; i < count; i += 1) {
         const hole = Math.floor(Math.random() * COLS);
         const row = Array(COLS).fill('#3c3c55');
@@ -848,6 +900,10 @@ function addGarbage(count) {
     if (alert) {
         alert.style.display = '';
         setTimeout(() => { alert.style.display = 'none'; }, 900);
+    }
+
+    if (checkActive) {
+        resolveGarbageCollision();
     }
 }
 

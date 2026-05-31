@@ -1,186 +1,105 @@
 <?php
-session_start();
+require_once __DIR__ . '/../backEnd/session_bootstrap.php';
 if (!isset($_SESSION['is_logged_in']) || $_SESSION['is_logged_in'] !== true) {
     $_SESSION['msg'] = "Please log in to access the leaderboard.";
-    header("Location: login.php");
-    exit();
+    header("Location: login.php"); exit();
 }
 include '../backEnd/tetrisgame.php';
-$auth = new tetrisgame();
+$auth    = new tetrisgame();
+$entries = $auth->getLeaderboard();
+$myRank  = $auth->getUserRanking($_SESSION['username']);
+$myScore = $auth->getScore($_SESSION['username']);
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leaderboard - Cosmic Tetris</title>
+    <title>Leaderboard — Cosmic Tetris</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/style.css?v=<?php echo filemtime(__DIR__ . '/../css/style.css'); ?>">
 </head>
+<body class="galaxy-bg cosmic-app-page leaderboard-page">
 
-<body class="galaxy-bg">
-    <div class="container min-vh-100 d-flex flex-column justify-content-center align-items-center py-4">
-        <div class="glass-card p-5 w-100 text-center" style="max-width: 800px;">
-            <h2 class="text-white mb-4 cosmic-title">Galactic Leaderboard</h2>
-            <p class="text-white mb-4">Top commanders across the cosmos</p>
+<div class="nebula-layer" aria-hidden="true"></div>
 
-            <!-- Leaderboard Table -->
-            <div class="leaderboard-container mb-4">
-                <div class="table-responsive">
-                    <table class="table table-dark table-striped">
-                        <thead>
-                            <tr>
-                                <th class="text-info">Rank</th>
-                                <th class="text-info">Commander</th>
-                                <th class="text-info">Score</th>
-                            </tr>
-                        </thead>
-                        <tbody id="leaderboard-body">
-                            <!-- Backend will populate this with PHP -->
-                            <?php
-                            foreach($auth->getLeaderboard() as $index => $entry) {
-                                echo "<tr>";
-                                echo "<td>" . ($index + 1) . "</td>";
-                                echo "<td>" . htmlspecialchars($entry['username']) . "</td>";
-                                echo "<td>" . htmlspecialchars($entry['score']) . "</td>";
-                                echo "</tr>";
-                            }
-                            ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+<main class="container cosmic-app-shell leaderboard-shell">
+    <section class="cosmic-card leaderboard-card page-enter" aria-labelledby="leaderboard-title">
 
-            <!-- Your Position -->
-             <br>
-             <br>
-            <div class="your-rank-box mb-4 p-3">
-                <h5 class="text-uppercase text-info tracking-wide mb-1">Your Ranking</h5>
-                <div class="row text-center">
-                    <div class="col-4">
-                        <div class="rank-display">
-                            <span class="display-6 text-white fw-bold" id="your-rank"><?php echo $auth->getUserRanking($_SESSION['username']) ?: '-'; ?></span>
-                            <small class="text-info">Rank</small>
-                        </div>
-                    </div>
-                    <div class="col-4">
-                        <div class="score-display">
-                            <span class="display-6 text-white fw-bold" id="your-score"><?php echo $auth->getScore($_SESSION['username']); ?></span>
-                            <small class="text-info">Score</small>
-                        </div>
-                    </div>
-                    <div class="col-4">
-                        <div class="position-display">
-                            <span class="display-6 text-white fw-bold" id="position-diff"><?php echo($_SESSION['username']); ?></span>
-                            <small class="text-info">Commander</small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <br>
+        <div class="leaderboard-header">
+            <div class="cosmic-kicker">Solo Rankings</div>
+            <h1 class="text-white cosmic-title" id="leaderboard-title">Galactic Leaderboard</h1>
+            <p class="cosmic-subtitle">Top commanders across the cosmos</p>
+        </div>
 
-            <!-- Navigation -->
-            <div class="d-grid gap-3 d-md-flex justify-content-md-center">
-                <button class="btn neon-btn" onclick="location.href='dashboard.php'">Back to Mission Control</button>
-                <button class="btn neon-btn" onclick="location.href='game.php'">Play Again</button>
+        <div class="leaderboard-container cosmic-table-wrap">
+            <div class="table-responsive">
+                <table class="table table-dark cosmic-table">
+                    <thead>
+                        <tr>
+                            <th style="width:60px">Rank</th>
+                            <th>Commander</th>
+                            <th style="text-align:right">Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($entries as $i => $entry):
+                            $rank = $i + 1;
+                            $rowClass = $rank === 1 ? 'rank-gold' : ($rank === 2 ? 'rank-silver' : ($rank === 3 ? 'rank-bronze' : ''));
+                            $medal    = $rank === 1 ? '&#127942;' : ($rank === 2 ? '&#129352;' : ($rank === 3 ? '&#129353;' : $rank));
+                        ?>
+                        <tr class="<?php echo $rowClass; ?>">
+                            <td>
+                                <strong>
+                                    <?php if ($rank <= 3): ?>
+                                        <span class="visually-hidden">Rank <?php echo $rank; ?></span>
+                                        <span aria-hidden="true"><?php echo $medal; ?></span>
+                                    <?php else: ?>
+                                        <?php echo $rank; ?>
+                                    <?php endif; ?>
+                                </strong>
+                            </td>
+                            <td><?php echo htmlspecialchars($entry['username'], ENT_QUOTES); ?></td>
+                            <td style="text-align:right;font-family:'Orbitron',sans-serif;font-size:0.95rem;">
+                                <?php echo number_format((int)$entry['score']); ?>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
             </div>
         </div>
-    </div>
 
-    <style>
-        .leaderboard-container {
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 15px;
-            padding: 20px;
-            border: 1px solid var(--glass-border);
-        }
+        <!-- Your stats -->
+        <div class="your-rank-box standing-panel">
+            <h5 class="text-uppercase tracking-wide mb-3" style="color:var(--neon-purple);font-family:'Orbitron',sans-serif;font-size:0.65rem;letter-spacing:3px;">Your Standing</h5>
+            <div class="row text-center">
+                <div class="col-4">
+                    <div class="rank-display">
+                        <span class="display-6 fw-bold"><?php echo $myRank ?: '—'; ?></span>
+                        <small class="text-info" style="font-family:'Orbitron',sans-serif;font-size:0.6rem;letter-spacing:1px;text-transform:uppercase;">Rank</small>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="score-display">
+                        <span class="display-6 fw-bold"><?php echo number_format((int)$myScore); ?></span>
+                        <small class="text-info" style="font-family:'Orbitron',sans-serif;font-size:0.6rem;letter-spacing:1px;text-transform:uppercase;">Score</small>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="position-display">
+                        <span class="display-6 fw-bold" style="font-size:1.3rem !important;"><?php echo htmlspecialchars($_SESSION['username'], ENT_QUOTES); ?></span>
+                        <small class="text-info" style="font-family:'Orbitron',sans-serif;font-size:0.6rem;letter-spacing:1px;text-transform:uppercase;">Commander</small>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-        .table-dark {
-            background: transparent;
-            border: none;
-        }
-
-        .table-dark thead th {
-            border-bottom: 2px solid var(--neon-blue);
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .table-dark tbody tr {
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            transition: background-color 0.3s ease;
-        }
-
-        .table-dark tbody tr:hover {
-            background: rgba(0, 243, 255, 0.1);
-        }
-
-        .table-dark td {
-            padding: 12px;
-            vertical-align: middle;
-        }
-
-        .your-rank-box {
-            background: rgba(176, 38, 255, 0.1);
-            border: 1px solid var(--neon-purple);
-            border-radius: 15px;
-            box-shadow: inset 0 0 20px rgba(176, 38, 255, 0.2);
-        }
-
-        .rank-display, .score-display, .position-display {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .rank-display .display-6 {
-            color: var(--neon-blue) !important;
-        }
-
-        .score-display .display-6 {
-            color: var(--neon-pink) !important;
-        }
-
-        .position-display .display-6 {
-            color: var(--neon-purple) !important;
-        }
-
-        .table-responsive {
-            border-radius: 10px;
-            overflow: hidden;
-        }
-
-        /* Trophy icons for top 3 */
-        .rank-1::before {
-            content: "🏆";
-            margin-right: 8px;
-        }
-
-        .rank-2::before {
-            content: "🥈";
-            margin-right: 8px;
-        }
-
-        .rank-3::before {
-            content: "🥉";
-            margin-right: 8px;
-        }
-
-        /* Responsive adjustments */
-        @media (max-width: 768px) {
-            .container {
-                padding: 20px;
-            }
-
-            .glass-card {
-                padding: 20px !important;
-            }
-
-            .table-responsive {
-                font-size: 14px;
-            }
-        }
-    </style>
+        <div class="leaderboard-actions stagger-children">
+            <a class="btn neon-btn" href="dashboard.php">Mission Control</a>
+            <a class="btn neon-btn" href="game.php">Play Again</a>
+        </div>
+    </section>
+</main>
 </body>
 </html>

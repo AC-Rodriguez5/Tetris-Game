@@ -1,5 +1,5 @@
 <?php
-session_start();
+require_once __DIR__ . '/../backEnd/session_bootstrap.php';
 if (!isset($_SESSION['is_logged_in']) || $_SESSION['is_logged_in'] !== true) {
     header("Location: login.php"); exit();
 }
@@ -30,11 +30,11 @@ if ($db) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Blitz Leaderboard - Cosmic Tetris</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/style.css?v=<?php echo filemtime(__DIR__ . '/../css/style.css'); ?>">
 </head>
-<body class="galaxy-bg">
-<div class="container py-5">
-    <div class="glass-card p-4 p-md-5">
+<body class="galaxy-bg cosmic-app-page leaderboard-page">
+<main class="container cosmic-app-shell leaderboard-shell">
+    <section class="cosmic-card leaderboard-card">
         <h2 class="cosmic-title text-white text-center mb-1">Blitz Leaderboard</h2>
         <p class="text-info text-center mb-4" style="font-size:0.85rem;letter-spacing:2px">
             2-MINUTE SPEED BATTLE RANKINGS
@@ -70,13 +70,20 @@ if ($db) {
                 <tbody>
                 <?php foreach ($rows as $i => $r):
                     $rank = $i + 1;
-                    $medal = $rank === 1 ? '🥇' : ($rank === 2 ? '🥈' : ($rank === 3 ? '🥉' : $rank));
+                    $medal = $rank === 1 ? '&#129351;' : ($rank === 2 ? '&#129352;' : ($rank === 3 ? '&#129353;' : $rank));
                     $isMe  = ($r['username'] === $_SESSION['username']);
                     $wr    = $r['total_games'] > 0 ? round(($r['wins'] / $r['total_games']) * 100) : 0;
                 ?>
                     <tr class="<?= $isMe ? 'blitz-my-row' : '' ?>"
                         style="background:<?= $isMe ? 'rgba(255,107,53,0.12)' : 'transparent' ?>">
-                        <td class="text-white fw-bold" style="font-size:1.1rem"><?= $medal ?></td>
+                        <td class="text-white fw-bold" style="font-size:1.1rem">
+                            <?php if ($rank <= 3): ?>
+                                <span class="visually-hidden">Rank <?= $rank ?></span>
+                                <span aria-hidden="true"><?= $medal ?></span>
+                            <?php else: ?>
+                                <?= $rank ?>
+                            <?php endif; ?>
+                        </td>
                         <td class="text-white fw-bold">
                             <?= htmlspecialchars($r['username']) ?>
                             <?php if ($isMe): ?><span class="badge ms-1" style="background:rgba(255,107,53,0.4);font-size:0.65rem">You</span><?php endif; ?>
@@ -92,11 +99,11 @@ if ($db) {
         </div>
         <?php endif; ?>
 
-        <div class="d-flex justify-content-center gap-3 mt-4">
-            <button class="btn neon-btn neon-blitz" onclick="location.href='multiplayer.php'">Play Blitz</button>
-            <button class="btn neon-btn" onclick="location.href='dashboard.php'">Dashboard</button>
+        <div class="leaderboard-actions">
+            <a class="btn neon-btn neon-blitz" href="multiplayer.php">Play Blitz</a>
+            <a class="btn neon-btn" href="dashboard.php">Dashboard</a>
         </div>
-    </div>
-</div>
+    </section>
+</main>
 </body>
 </html>
