@@ -1,0 +1,5 @@
+.env
+.env.*
+dbConnect/dbconnect.local.php
+tetris-db.local.php
+*.zip

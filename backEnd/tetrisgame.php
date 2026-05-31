@@ -1,6 +1,6 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+    require_once __DIR__ . '/session_bootstrap.php';
 }
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
@@ -13,21 +13,44 @@ class tetrisgame {
         $dbcon = new dbcon();
         $this->db = $dbcon->dbconnect();
         if ($this->db === null) {
-            $message = "Database connection failed.";
-            if (!empty($dbcon->lastError)) {
-                $message .= " " . $dbcon->lastError;
-            }
-            die(htmlspecialchars($message, ENT_QUOTES, 'UTF-8'));
+            error_log('[tetrisgame] Database connection failed. ' . ($dbcon->lastDebugError ?: $dbcon->lastError));
+            die('Service temporarily unavailable. Please try again later.');
         }
     }
 
     // Function to register a new user in the database with email, username, and password.
     public function RegisterUser($email, $username, $password, $repassword) {
+        $email = trim((string)$email);
+        $username = trim((string)$username);
+        $old = ['username' => $username, 'email' => $email];
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $_SESSION['old_register'] = $old;
+            $_SESSION['msg'] = "Enter a valid email address.";
+            header("Location: ../dashboard/register.php");
+            exit();
+        }
+
+        if (strlen($username) < 3) {
+            $_SESSION['old_register'] = $old;
+            $_SESSION['msg'] = "Commander name needs at least 3 characters.";
+            header("Location: ../dashboard/register.php");
+            exit();
+        }
+
+        if (strlen((string)$password) < 6) {
+            $_SESSION['old_register'] = $old;
+            $_SESSION['msg'] = "Password needs at least 6 characters.";
+            header("Location: ../dashboard/register.php");
+            exit();
+        }
+
         // Check if email already exists
         $stmt = $this->db->prepare('SELECT email FROM "TetrisGame" WHERE email = ?');
         $stmt->execute([$email]);
         
         if($stmt->rowCount() > 0) {
+            $_SESSION['old_register'] = $old;
             $_SESSION['msg'] = "Email already exists.";
             header("Location: ../dashboard/register.php");
             exit();
@@ -38,6 +61,7 @@ class tetrisgame {
         $stmt->execute([$username]);
         
         if($stmt->rowCount() > 0) {
+            $_SESSION['old_register'] = $old;
             $_SESSION['msg'] = "Username already exists.";
             header("Location: ../dashboard/register.php");
             exit();
@@ -49,10 +73,12 @@ class tetrisgame {
             $stmt = $this->db->prepare('INSERT INTO "TetrisGame" (email, username, password) VALUES (?, ?, ?)');
             $stmt->execute([$email, $username, $hashedPassword]);
             
+            unset($_SESSION['old_register']);
             $_SESSION['msg'] = "Registration successful.";
             header("Location: ../dashboard/login.php");
             exit();
         } else {
+            $_SESSION['old_register'] = $old;
             $_SESSION['msg'] = "Passwords do not match.";
             header("Location: ../dashboard/register.php");
             exit();
@@ -64,12 +90,15 @@ class tetrisgame {
         // Check if email exists in the database
         $stmt = $this->db->prepare('SELECT * FROM "TetrisGame" WHERE email = ?');
         $stmt->execute([$email]);
-        
+
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
         // If email exists, verify the password using password_verify() function
-        if($stmt->rowCount() > 0) {
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        if($user) {
             // Verify the password
             if(password_verify($password, $user['password'])) {
+                session_regenerate_id(true);
+                unset($_SESSION['old_login_email']);
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['username'] = $user['username'];
                 $_SESSION['is_logged_in'] = true;
@@ -77,12 +106,14 @@ class tetrisgame {
                 header("Location: ../dashboard/dashboard.php");
                 exit();
             } else {
-                $_SESSION['msg'] = "Incorrect password.";
+                $_SESSION['old_login_email'] = $email;
+                $_SESSION['msg'] = "Invalid email or password.";
                 header("Location: ../dashboard/login.php");
                 exit();
             }
         } else {
-            $_SESSION['msg'] = "Email not found.";
+            $_SESSION['old_login_email'] = $email;
+            $_SESSION['msg'] = "Invalid email or password.";
             header("Location: ../dashboard/login.php");
             exit();
         }
